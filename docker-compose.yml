@@ -1,0 +1,44 @@
+# Local single-machine deployment. Open http://localhost:5173
+#   docker compose up --build
+# With an NVIDIA GPU (needs NVIDIA Container Toolkit):
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+services:
+  redis:
+    image: redis:7-alpine
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+    volumes:
+      - ./data:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    command: ["rq", "worker", "--url", "redis://redis:6379/0"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+    volumes:
+      - ./data:/data
+    depends_on:
+      - redis
+
+  web:
+    build:
+      context: web
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api

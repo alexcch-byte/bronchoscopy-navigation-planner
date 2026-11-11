@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bronchoscopy Planner - sign in</title>
+<style>
+  :root { --bg:#f6f7f9; --panel:#fff; --ink:#1c2330; --muted:#5f6b7a; --line:#dde2e9; --accent:#1d6fdc; --accent-ink:#fff; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --panel:#1b212a; --ink:#e8ecf2; --muted:#98a3b3; --line:#2c3541; --accent:#5aa2ff; --accent-ink:#0b1220; --bad:#ff8a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; min-height:100vh; display:grid; place-items:center; padding:16px; }
+  main { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:24px; width:min(420px,100%); }
+  h1 { font-size:18px; margin:0 0 4px; }
+  p { color:var(--muted); margin:6px 0 14px; font-size:13.5px; }
+  input { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); font:inherit; }
+  button { width:100%; margin-top:12px; padding:10px; border:0; border-radius:8px; background:var(--accent); color:var(--accent-ink); font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.6; }
+  #err { color:var(--bad); min-height:1.4em; margin-top:10px; font-size:13.5px; }
+  .note { border-top:1px solid var(--line); margin-top:18px; padding-top:12px; font-size:12.5px; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bronchoscopy Planner</h1>
+  <p>Read-only demo. Enter the passcode you were given.</p>
+  <form id="f">
+    <input id="code" type="password" autocomplete="current-password" placeholder="Passcode" autofocus>
+    <button id="go" type="submit">Sign in</button>
+  </form>
+  <div id="err" role="alert"></div>
+  <div class="note">Planning aid only. <strong>Not for clinical use.</strong> The demo shows runs on a synthetic phantom and on the public AeroPath dataset (CC BY 4.0, arXiv:2311.01138). No patient data.</div>
+</main>
+<script>
+  const f = document.getElementById('f'), err = document.getElementById('err'), go = document.getElementById('go');
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault(); err.textContent = ''; go.disabled = true;
+    try {
+      const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passcode: document.getElementById('code').value }) });
+      if (r.ok) { location.href = '/'; return; }
+      let m = 'Could not sign in.'; try { m = (await r.json()).detail || m; } catch (_) {}
+      err.textContent = m.charAt(0).toUpperCase() + m.slice(1) + '.';
+    } catch (_) { err.textContent = 'Network error. Try again.'; }
+    go.disabled = false;
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# GPU override for the worker. The worker image will also need a CUDA build of
+# PyTorch/ONNX Runtime once ML segmentation lands (Phase 2).
+services:
+  worker:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

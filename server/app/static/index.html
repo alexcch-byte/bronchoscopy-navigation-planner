@@ -1,0 +1,1290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bronchoscopy Planner - local test console</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #5f6b7a; --line: #dde2e9;
+    --accent: #1d6fdc; --accent-ink: #ffffff; --warn-bg: #fff4d6; --warn-line: #e2b93d; --bad: #b3261e; --good: #1b7f3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c; --panel: #1b212a; --ink: #e8ecf2; --muted: #98a3b3; --line: #2c3541;
+      --accent: #5aa2ff; --accent-ink: #0b1220; --warn-bg: #3a3118; --warn-line: #8a6d1c; --bad: #ff8a80; --good: #6fd08c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .tag { font-size: 12px; color: var(--muted); }
+  .banner { background: var(--warn-bg); border-bottom: 1px solid var(--warn-line); padding: 6px 16px; font-size: 12.5px; }
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: calc(100vh - 80px); }
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 14px 16px; overflow-y: auto; }
+  main { padding: 14px 18px; min-width: 0; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+  h2:first-child { margin-top: 0; }
+  label { display: block; margin: 8px 0 2px; font-size: 13px; }
+  select, input[type=number], input[type=text] { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+  input[type=range] { width: 100%; }
+  .row { display: flex; gap: 8px; } .row > * { flex: 1; min-width: 0; }
+  .check { display: flex; gap: 8px; align-items: center; margin: 8px 0; } .check input { margin: 0; }
+  .hint { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; width: 100%; margin-top: 12px; padding: 9px; }
+  button:disabled { opacity: .55; cursor: default; }
+  .status { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; white-space: pre-wrap; max-height: 150px; overflow: auto; }
+  .jobs { list-style: none; margin: 0; padding: 0; }
+  .jobs li { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .jobs li.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; }
+  .badge.done { color: var(--good); border-color: var(--good); } .badge.error { color: var(--bad); border-color: var(--bad); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; flex-wrap: wrap; }
+  .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 12px; }
+  .tabs button.active { border-bottom-color: var(--accent); font-weight: 600; }
+  .tab { display: none; } .tab.active { display: block; }
+  table { border-collapse: collapse; width: 100%; max-width: 640px; }
+  th, td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 500; color: var(--muted); width: 55%; }
+  .warns { list-style: none; padding: 0; margin: 8px 0; max-width: 760px; }
+  .warns li { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 6px; padding: 7px 10px; margin-bottom: 6px; }
+  .empty { color: var(--muted); padding: 30px 0; }
+  .err { color: var(--bad); white-space: pre-wrap; }
+  #view { width: 100%; height: min(68vh, 640px); background: #0d1117; border-radius: 8px; position: relative; overflow: hidden; }
+  #view canvas { display: block; }
+  .viewbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 10px 0; }
+  .viewbar label { display: flex; gap: 6px; align-items: center; margin: 0; }
+  .viewbar input[type=range] { width: 160px; }
+  .legend { font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px 0 10px; vertical-align: -1px; }
+  video { max-width: 100%; border-radius: 8px; background: #000; }
+  .stills { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .stills figure { margin: 0; } .stills img { width: 100%; border-radius: 6px; display: block; background: #000; cursor: zoom-in; }
+  .stills figcaption { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  pre.log { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; overflow: auto; max-height: 60vh; font-size: 12px; }
+  dialog { border: 0; padding: 0; background: transparent; max-width: 96vw; } dialog::backdrop { background: rgba(0,0,0,.75); } dialog img { max-width: 96vw; max-height: 92vh; border-radius: 6px; }
+  /* CT viewer */
+  .ctbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 10px; }
+  .ctbar label { display: flex; gap: 6px; align-items: center; margin: 0; }
+  .ctbar input[type=number] { width: 80px; } .ctbar select { width: auto; }
+  .ctgrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); grid-template-areas: "ax co" "ax sa"; gap: 10px; align-items: start; }
+  @media (max-width: 860px) { .ctgrid { grid-template-columns: 1fr; grid-template-areas: "ax" "co" "sa"; } }
+  .ctpane { position: relative; background: #000; border-radius: 6px; overflow: hidden; }
+  .ctpane canvas { display: block; width: 100%; cursor: crosshair; outline: none; }
+  .ctpane .ctlabel { position: absolute; top: 4px; left: 6px; font-size: 11px; color: #9fb0c3; pointer-events: none; text-shadow: 0 0 3px #000; }
+  #paneAx { grid-area: ax; } #paneCo { grid-area: co; } #paneSa { grid-area: sa; }
+  #ctReadout { margin: 10px 0; max-width: 640px; }
+  #ctUse { width: auto; padding: 8px 16px; margin-top: 4px; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<header>
+  <h1>Bronchoscopy Planner</h1>
+  <span class="tag">local test console - runs on this machine only</span>
+</header>
+<div class="banner">Planning aid only. <strong>Not for clinical use.</strong> Test data only: a synthetic phantom and the public AeroPath CTs. Targets chosen here are stand-in points, not nodules.</div>
+
+<div class="layout">
+<aside>
+  <h2>Case</h2>
+  <label for="source">Source</label>
+  <select id="source"></select>
+  <div id="caseWrap" hidden>
+    <label for="case">AeroPath case</label>
+    <select id="case"></select>
+  </div>
+  <div id="importWrap" hidden>
+    <div class="hint" id="importOff" hidden></div>
+    <div id="importBox">
+      <div id="dropZone" style="border:2px dashed var(--line);border-radius:8px;padding:14px 10px;text-align:center;cursor:pointer;margin-bottom:10px;background:var(--bg);transition:background .2s,border-color .2s">
+        <div style="font-weight:600;font-size:13px">📁 Drag & drop scans here</div>
+        <div class="hint">JPG, PNG, TIFF, ZIP archives, or 3D volume (.nii.gz, .mha, .nrrd)</div>
+      </div>
+      <label for="fileIn">Or choose files</label>
+      <input type="file" id="fileIn" multiple accept=".nii,.gz,.mha,.mhd,.raw,.zraw,.nrrd,.nhdr,.jpg,.jpeg,.png,.bmp,.tif,.tiff,.zip">
+      <div class="row" style="margin-top:6px">
+        <button id="pickFolder" type="button">Choose image folder</button>
+        <button id="delUp" type="button" hidden>Remove</button>
+      </div>
+      <input type="file" id="folderIn" webkitdirectory multiple hidden>
+      <label for="localPath">Or a path on this PC</label>
+      <div class="row"><input type="text" id="localPath" placeholder="C:\scans\ct.nii.gz, .zip, or image folder"><button id="useLocal" type="button" style="flex:0 0 auto">Use</button></div>
+      <div class="status" id="upStatus" hidden></div>
+      <div id="stackBox" hidden>
+        <h2 style="margin-top:12px">Image series settings</h2>
+        <label for="stPreset">Resolution preset</label>
+        <select id="stPreset">
+          <option value="0.75,1.0">Standard Chest CT (0.75 mm pixel, 1.0 mm slice)</option>
+          <option value="0.5,0.75">High-Res CT / HRCT (0.50 mm pixel, 0.75 mm slice)</option>
+          <option value="0.8,1.25">Low-Dose Chest CT (0.80 mm pixel, 1.25 mm slice)</option>
+          <option value="1.0,2.5">Thick-Slice CT (1.00 mm pixel, 2.50 mm slice)</option>
+          <option value="custom">Custom resolution...</option>
+        </select>
+        <div class="row">
+          <div><label for="stPx">Pixel size (mm)</label><input type="number" id="stPx" step="0.01" min="0.05" value="0.75"></div>
+          <div><label for="stSl">Slice spacing (mm)</label><input type="number" id="stSl" step="0.1" min="0.1" value="1.0"></div>
+        </div>
+        <label for="stWinPreset">Window preset</label>
+        <select id="stWinPreset">
+          <option value="-600,1500">Lung window (-600 centre, 1500 width HU)</option>
+          <option value="40,400">Soft tissue / Mediastinum (40 centre, 400 width HU)</option>
+          <option value="300,1500">Bone window (300 centre, 1500 width HU)</option>
+          <option value="0,2000">Wide full range (0 centre, 2000 width HU)</option>
+          <option value="custom">Custom window...</option>
+        </select>
+        <div class="row">
+          <div><label for="stWc">Window centre (HU)</label><input type="number" id="stWc" value="-600"></div>
+          <div><label for="stWw">Window width (HU)</label><input type="number" id="stWw" value="1500" min="1"></div>
+        </div>
+        <label for="stFirst">First image is</label>
+        <select id="stFirst"><option value="auto">Detect automatically</option><option value="head">The head end</option><option value="feet">The feet end</option></select>
+        <div class="check"><input type="checkbox" id="stInv"><label for="stInv" style="margin:0">Negative images (air is white)</label></div>
+        <button id="previewCtBtn" type="button" style="width:100%;margin-top:8px">Open in CT viewer to verify & pick nodule</button>
+        <p class="hint">JPEGs carry no HU values or spacing. Enter the pixel size and slice spacing from the scan report, and the window the images were saved with (a lung window is -600 / 1500 HU). Results are approximate and not validated.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>Target</h2>
+  <div class="check" style="flex-wrap:wrap;gap:4px 14px">
+    <span style="display:inline-flex;gap:6px;align-items:center"><input type="radio" name="tmode" id="tauto" value="auto" checked><label for="tauto" style="margin:0">Automatic</label></span>
+    <span style="display:inline-flex;gap:6px;align-items:center"><input type="radio" name="tmode" id="tpick" value="pick"><label for="tpick" style="margin:0">Pick on CT</label></span>
+    <span style="display:inline-flex;gap:6px;align-items:center"><input type="radio" name="tmode" id="tmanual" value="manual"><label for="tmanual" style="margin:0">Manual</label></span>
+  </div>
+  <div id="autoBox">
+    <label for="pct">Distal branch: <span id="pctVal">70</span>% (0 = near, 100 = far)</label>
+    <input type="range" id="pct" min="0" max="100" value="70">
+    <label for="ahead">Distance beyond the airway tip (mm)</label>
+    <input type="number" id="ahead" value="15" min="2" max="40" step="1">
+    <p class="hint" id="autoHint">Places a test point in the lung just past a distal airway tip.</p>
+  </div>
+  <div id="manualBox" hidden>
+    <label>Position, physical LPS mm</label>
+    <div class="row"><input type="number" id="tx" placeholder="x" step="0.1"><input type="number" id="ty" placeholder="y" step="0.1"><input type="number" id="tz" placeholder="z" step="0.1"></div>
+    <p class="hint" id="manualHint">Phantom nodule is at 60.2, -1.4, -37.0.</p>
+  </div>
+  <div id="pickBox" hidden>
+    <button id="openCt" type="button" style="width:100%">Open the CT and click the nodule</button>
+    <div class="status" id="pickInfo">No point chosen yet.</div>
+    <p class="hint">Scroll through the slices, click the nodule, then press "Use this location".</p>
+  </div>
+  <label for="radius">Nodule radius (mm)</label>
+  <input type="number" id="radius" value="6" min="1" max="40" step="0.5">
+
+  <h2>Scope</h2>
+  <label for="mind">Smallest airway the scope can enter (mm)</label>
+  <input type="number" id="mind" value="3" min="1" max="10" step="0.5">
+  <label for="camRoll">Camera roll angle (°)</label>
+  <input type="number" id="camRoll" value="0" min="-180" max="180" step="5">
+  <div class="check"><input type="checkbox" id="video" checked><label for="video" style="margin:0">Render fly-through video</label></div>
+
+  <button class="primary" id="run">Run planning</button>
+  <div class="status" id="status">Idle.</div>
+
+  <h2>Runs</h2>
+  <ul class="jobs" id="jobs"></ul>
+  <p class="hint" id="where"></p>
+</aside>
+
+<main>
+  <div class="tabs" id="tabs">
+    <button data-tab="summary" class="active">Summary</button>
+    <button data-tab="ctview">CT</button>
+    <button data-tab="view3d">3D airway</button>
+    <button data-tab="videotab">Fly-through</button>
+    <button data-tab="stills">Stills</button>
+    <button data-tab="logtab">Log</button>
+  </div>
+
+  <section class="tab active" id="summary"><div class="empty">Run a case, or pick a previous run on the left.</div></section>
+
+  <section class="tab" id="ctview">
+    <div id="ctEmpty" class="empty">Choose a source on the left, set the target to "Pick on CT", and press "Open the CT and click the nodule".</div>
+    <div id="ctWrap" hidden>
+      <div class="ctbar">
+        <strong id="ctName"></strong>
+        <label>Window <select id="ctPreset"><option value="-600,1500">Lung</option><option value="40,400">Soft tissue</option><option value="300,1500">Bone</option></select></label>
+        <label>Centre <input type="number" id="ctWc" value="-600" step="10"></label>
+        <label>Width <input type="number" id="ctWw" value="1500" step="10" min="1"></label>
+        <label>Nodule radius (mm) <input type="number" id="ctRad" value="6" step="0.5" min="1" max="40"></label>
+      </div>
+      <div class="ctgrid">
+        <div class="ctpane" id="paneAx"><canvas id="cvAx" tabindex="0"></canvas><div class="ctlabel">Axial</div></div>
+        <div class="ctpane" id="paneCo"><canvas id="cvCo"></canvas><div class="ctlabel">Coronal</div></div>
+        <div class="ctpane" id="paneSa"><canvas id="cvSa"></canvas><div class="ctlabel">Sagittal</div></div>
+      </div>
+      <div class="viewbar"><label>Slice <input type="range" id="ctSlice" min="0" max="0" value="0" style="width:260px"></label><span class="legend" id="ctSliceLabel"></span></div>
+      <div class="status" id="ctReadout">Click the nodule on any of the three images.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="ctUse" class="primary" style="width:auto;margin-top:4px" disabled>Use this location as the nodule</button>
+        <button id="ctPlacePhantom" type="button" class="primary" style="background:#00875a;border-color:#00875a;width:auto;margin-top:4px" disabled hidden>Place new nodule in phantom here</button>
+        <button id="ctHint" type="button" style="margin-top:4px" hidden></button>
+      </div>
+      <p class="hint"><b>Scroll</b> over the axial image to move through the slices (scroll down = toward the feet; <b>Shift</b> moves 5 at a time; or use the slider, arrow keys, PageUp/PageDown). <b>Click</b> to place the nodule; the circle shows its size. The coronal and sagittal images follow the crosshair and can be clicked too. Patient's right is on the left of the axial image.</p>
+    </div>
+  </section>
+
+  <section class="tab" id="view3d">
+    <div id="view"></div>
+    <div class="viewbar">
+      <label>Route position <input type="range" id="pos" min="0" max="1000" value="0"></label>
+      <span id="posLabel" class="legend"></span>
+      <label><input type="checkbox" id="inside"> Inside view</label>
+      <label>Airway opacity <input type="range" id="opac" min="5" max="100" value="35"></label>
+      <button id="vFront">Front</button><button id="vSide">Side</button><button id="vTop">Top</button>
+    </div>
+    <div class="viewbar" id="flybar">
+      <button id="play">Play fly-through</button>
+      <label>Speed <input type="range" id="speed" min="2" max="30" value="8"> <span id="speedVal" class="legend">8 mm/s</span></label>
+      <button id="lookReset">Reset look</button><button id="lookBack">Look back</button>
+      <label>Scope roll <button id="rollCCW" type="button" title="Roll counter-clockwise 15° (Q)">↺ -15°</button> <button id="rollCW" type="button" title="Roll clockwise 15° (E)">↻ +15°</button> <input type="range" id="rollSlider" min="-180" max="180" value="0" style="width:100px"> <span id="rollVal" class="legend">0°</span></label>
+      <span class="legend">Inside view: <b>drag</b> to look around, <b>Shift+drag</b> or <b>Q/E</b> to roll scope, <b>scroll</b> to zoom, <b>double-click</b> to reset.</span>
+    </div>
+    <div class="legend"><i style="background:#2ee66b"></i>green line: route <i style="background:#2b82ff"></i>blue ball: end of path <i style="background:#ffd23f"></i>yellow ball: target <i style="background:#38e8ff"></i>position marker <i style="background:#4a7a96"></i>centerline tree</div>
+    <p class="hint">Drag to rotate, scroll to zoom, right-drag to pan. Patient left is on the right of the screen in the Front view. Needs internet once to load three.js.</p>
+
+    <div id="editRoutePanel" style="margin-top:14px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:8px" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0;font-size:14px">Edit Route (Centerline Branches & Alternatives)</h3>
+        <div style="display:flex;gap:8px">
+          <button id="btnResetRoute" type="button" style="display:none">Reset to automatic</button>
+          <button id="btnSaveEditedRoute" type="button" class="primary" style="margin:0;width:auto;padding:6px 14px" disabled>Save as a new run</button>
+        </div>
+      </div>
+      <p class="hint" style="margin:4px 0 8px">Click any alternative branch below (or a node in the 3D tree) to preview a route ending there.</p>
+      <div id="editPreviewMetrics" style="display:none;margin-bottom:8px;padding:8px 10px;background:var(--bg);border-radius:6px;font-size:13px">
+        <strong>Preview route:</strong> <span id="previewMetricsText"></span>
+      </div>
+      <div style="overflow-x:auto">
+        <table id="altTable" style="max-width:100%;font-size:12px;border-collapse:collapse;width:100%">
+          <thead>
+            <tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--line)">
+              <th style="padding:4px 6px;width:24px">#</th>
+              <th style="padding:4px 6px">Exit point (LPS mm)</th>
+              <th style="padding:4px 6px">Gap to nodule</th>
+              <th style="padding:4px 6px">Length</th>
+              <th style="padding:4px 6px">Min lumen</th>
+              <th style="padding:4px 6px">Approach angle</th>
+              <th style="padding:4px 6px">Action</th>
+            </tr>
+          </thead>
+          <tbody id="altTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  <section class="tab" id="videotab">
+    <div class="viewbar" id="videoRotBar" style="margin-bottom:8px">
+      <span class="legend" style="font-weight:600">Video rotation:</span>
+      <button id="vidRotCCW" type="button" title="Rotate 90° Counter-Clockwise (↺)">↺ 90° CCW</button>
+      <button id="vidRotCW" type="button" title="Rotate 90° Clockwise (↻)">↻ 90° CW</button>
+      <button id="vidRot180" type="button" title="Invert 180°">180°</button>
+      <button id="vidFlipH" type="button" title="Flip Horizontally (mirror)">⇄ Flip</button>
+      <label>Angle <input type="range" id="vidAngleSlider" min="-180" max="180" value="0" style="width:130px"> <span id="vidAngleVal" class="legend">0°</span></label>
+      <button id="vidRotReset" type="button">Reset rotation</button>
+    </div>
+    <div id="videoWrapper" style="display:flex;justify-content:center;align-items:center;background:#000;border-radius:8px;overflow:hidden;min-height:360px;max-width:720px;position:relative">
+      <div id="videoBox" style="width:100%;display:flex;justify-content:center;align-items:center"><div class="empty">No video for this run.</div></div>
+    </div>
+    <div id="videoMeta" style="margin-top:8px"></div>
+    <p style="margin-top:10px">
+      <button id="goFly">Interactive fly-through: steer & look around</button>
+      <span class="hint">Use the rotation toolbar above to rotate the recorded video, or replay the route live in the interactive 3D view where you can steer, roll, and look in any direction.</span>
+    </p>
+  </section>
+  <section class="tab" id="stills"><div class="empty">No stills for this run.</div></section>
+  <section class="tab" id="logtab"><pre class="log" id="logPre">(no run selected)</pre></section>
+</main>
+</div>
+<footer style="padding:10px 18px;border-top:1px solid var(--line);color:var(--muted);font-size:12px">
+  Test data: a synthetic phantom and the AeroPath dataset (CC BY 4.0, arXiv:2311.01138). Planning aid only; <strong>not for clinical use</strong>.
+</footer>
+<dialog id="dlg"><img id="dlgImg" alt=""></dialog>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const $ = (id) => document.getElementById(id);
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  if (r.status === 401) { location.href = '/login'; throw new Error('login required'); }
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(typeof m === 'string' ? m : JSON.stringify(m)); }
+  return r.json();
+};
+const fmt = (v, d = 1) => (typeof v === 'number' ? v.toFixed(d) : v);
+
+/* ------------------------------------------------------------ tabs */
+document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+function showTab(name) {
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === name));
+  if (name === 'view3d') { viewer.resize(); }
+  if (name === 'ctview') ctRedrawAll();
+}
+
+/* ------------------------------------------------------------ controls */
+let cases = null;
+function syncSource() {
+  const src = $('source').value, aero = src === 'aeropath', imp = src === 'upload';
+  $('caseWrap').hidden = !aero;
+  $('importWrap').hidden = !imp;
+  $('autoHint').textContent = aero
+    ? 'Places a test point in the lung just past a distal airway tip.'
+    : imp ? 'Places a test point past a distal airway tip, inside an approximate lung mask found from the scan.'
+          : 'Uses the phantom\'s known nodule.';
+  $('manualHint').textContent = imp
+    ? 'For a volume file these are its own physical (LPS) mm. For an image series they are mm from the first pixel, z up from the feet.'
+    : 'Phantom nodule is at 60.2, -1.4, -37.0.';
+  $('pct').disabled = $('ahead').disabled = !(aero || imp);
+  $('radius').value = aero || imp ? 6 : 5;
+  if (imp) {
+    const ok = cases && cases.imports_allowed;
+    $('importOff').hidden = ok; $('importBox').hidden = !ok;
+    $('importOff').textContent = 'Importing scans is switched off on this URL because it is shared (Tailscale or another proxy) and the console has no login. Open http://127.0.0.1:8000 on the PC that runs it.';
+  }
+}
+const targetMode = () => document.querySelector('input[name=tmode]:checked').value;   // auto | pick | manual
+function syncMode() {
+  const m = targetMode();
+  $('autoBox').hidden = m !== 'auto'; $('manualBox').hidden = m !== 'manual'; $('pickBox').hidden = m !== 'pick';
+}
+$('source').addEventListener('change', syncSource);
+document.querySelectorAll('input[name=tmode]').forEach((r) => r.addEventListener('change', syncMode));
+$('pct').addEventListener('input', () => { $('pctVal').textContent = $('pct').value; });
+
+async function loadCases() {
+  cases = await api('/api/cases');
+  const src = $('source'); src.innerHTML = '';
+  src.add(new Option('Synthetic phantom (fast, ~15 s)', 'phantom'));
+  if (cases.aeropath.length) src.add(new Option(`AeroPath real CT (${cases.aeropath.length} cases)`, 'aeropath'));
+  src.add(new Option('My own CT (import a file or images)', 'upload'));
+  const cs = $('case'); cs.innerHTML = '';
+  cases.aeropath.forEach((c) => cs.add(new Option(`Case ${c}`, c)));
+  if (cases.aeropath.includes(20)) cs.value = 20;
+  if (cases.jobs_dir) $('where').textContent = `Outputs: ${cases.jobs_dir}`;
+  syncSource(); syncMode(); applyMode();
+}
+// Public (proxied) visitors get an interactive phantom demo.
+function applyMode() {
+  if (cases.mode !== 'public') return;
+  const src = $('source');
+  src.innerHTML = '';
+  src.add(new Option('Synthetic phantom (fast, ~15 s)', 'phantom'));
+  src.value = 'phantom';
+  $('caseWrap').hidden = true;
+  $('importWrap').hidden = true;
+  $('where').hidden = true;
+  document.querySelector('#tabs button[data-tab=logtab]').hidden = true;  // job logs can hold local paths
+  document.querySelector('#tabs button[data-tab=ctview]').hidden = false; // CT viewer is allowed for phantom!
+  const aside = document.querySelector('aside');
+  if (!$('pubBanner')) {
+    const note = document.createElement('div');
+    note.id = 'pubBanner';
+    note.className = 'banner';
+    note.style.margin = '0 0 12px 0';
+    note.style.borderRadius = '6px';
+    note.textContent = 'Interactive phantom demo. Your runs are private to this session and deleted after 12 h.';
+    aside.prepend(note);
+    const out = document.createElement('button');
+    out.textContent = 'Sign out';
+    out.style.marginTop = '14px';
+    out.style.width = '100%';
+    out.addEventListener('click', async () => { await fetch('/api/logout', { method: 'POST' }); location.href = '/login'; });
+    aside.appendChild(out);
+  }
+}
+
+/* ------------------------------------------------------------ importing a CT */
+let currentUpload = null;
+const upStatus = (msg, bad = false) => { const s = $('upStatus'); s.hidden = !msg; s.textContent = msg || ''; s.style.color = bad ? 'var(--bad)' : ''; };
+function showUpload(u) {
+  currentUpload = u; $('delUp').hidden = !u;
+  $('stackBox').hidden = !(u && u.kind === 'images');
+  if (!u) { upStatus(''); return; }
+  const i = u.info || {};
+  const fmtStr = (i.formats || []).length ? ` [${(i.formats).join(', ').toUpperCase()}]` : '';
+  upStatus(u.kind === 'volume'
+    ? `Volume: ${u.name}\n${(i.size_xyz || []).join(' x ')} voxels, spacing ${(i.spacing_mm || []).join(' x ')} mm, ${i.pixel_type}`
+    : `Image series${fmtStr}: ${i.n_images} images, ${(i.size_px || []).join(' x ')} px (${i.first} ... ${i.last})\nSelect a preset or enter resolution & window below, then click "Open in CT viewer" to inspect.`);
+}
+function sendFiles(fileList) {
+  const files = [...fileList];
+  if (!files.length) return;
+  const fd = new FormData(); let bytes = 0;
+  files.forEach((f) => { fd.append('files', f, f.name); bytes += f.size; });
+  upStatus(`Uploading ${files.length} file(s), ${(bytes / 1e6).toFixed(0)} MB...`);
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/uploads');
+  xhr.upload.onprogress = (e) => { if (e.lengthComputable) upStatus(`Uploading... ${Math.round((e.loaded / e.total) * 100)}%`); };
+  xhr.onerror = () => upStatus('Upload failed (network).', true);
+  xhr.onload = () => {
+    let d = {}; try { d = JSON.parse(xhr.responseText); } catch (e) { /* ignore */ }
+    if (xhr.status === 200) showUpload(d);
+    else { showUpload(null); upStatus(typeof d.detail === 'string' ? d.detail : `Upload failed (${xhr.status}).`, true); }
+  };
+  xhr.send(fd);
+}
+$('fileIn').addEventListener('change', () => sendFiles($('fileIn').files));
+$('pickFolder').addEventListener('click', () => $('folderIn').click());
+$('folderIn').addEventListener('change', () => {
+  const ok = [...$('folderIn').files].filter((f) => /\.(jpe?g|png|bmp|tiff?|nii(\.gz)?|mha|mhd|nrrd|raw|zip)$/i.test(f.name));
+  if (!ok.length) { upStatus('No supported CT files or images in that folder.', true); return; }
+  sendFiles(ok);
+});
+$('useLocal').addEventListener('click', async () => {
+  const p = $('localPath').value.trim(); if (!p) return;
+  try { showUpload(await api('/api/uploads/local', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p }) })); }
+  catch (e) { showUpload(null); upStatus(e.message, true); }
+});
+$('delUp').addEventListener('click', async () => {
+  if (!currentUpload) return;
+  try { await api(`/api/uploads/${currentUpload.upload_id}`, { method: 'DELETE' }); } catch (e) { /* ignore */ }
+  showUpload(null); $('fileIn').value = ''; $('folderIn').value = '';
+});
+
+// Dropzone
+const dropZone = $('dropZone');
+if (dropZone) {
+  dropZone.addEventListener('click', () => $('fileIn').click());
+  ['dragenter', 'dragover'].forEach((name) => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.style.borderColor = 'var(--accent)';
+      dropZone.style.background = 'rgba(90, 162, 255, 0.08)';
+    });
+  });
+  ['dragleave', 'drop'].forEach((name) => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.style.borderColor = 'var(--line)';
+      dropZone.style.background = 'var(--bg)';
+    });
+  });
+  dropZone.addEventListener('drop', async (e) => {
+    const items = e.dataTransfer.items;
+    const files = [];
+    if (items && items.length) {
+      async function traverseEntry(entry) {
+        if (entry.isFile) {
+          const file = await new Promise((res, rej) => entry.file(res, rej));
+          files.push(file);
+        } else if (entry.isDirectory) {
+          const reader = entry.createReader();
+          const entries = await new Promise((res, rej) => reader.readEntries(res, rej));
+          for (const child of entries) await traverseEntry(child);
+        }
+      }
+      const promises = [];
+      for (let i = 0; i < items.length; i++) {
+        const entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+        if (entry) promises.push(traverseEntry(entry));
+        else if (items[i].kind === 'file') files.push(items[i].getAsFile());
+      }
+      if (promises.length) await Promise.all(promises);
+    } else if (e.dataTransfer.files) {
+      files.push(...e.dataTransfer.files);
+    }
+    if (files.length) sendFiles(files);
+  });
+}
+
+// Image series settings presets
+$('stPreset').addEventListener('change', () => {
+  if ($('stPreset').value === 'custom') return;
+  const [px, sl] = $('stPreset').value.split(',').map(Number);
+  $('stPx').value = px; $('stSl').value = sl;
+});
+['stPx', 'stSl'].forEach((id) => {
+  $(id).addEventListener('input', () => { $('stPreset').value = 'custom'; });
+});
+$('stWinPreset').addEventListener('change', () => {
+  if ($('stWinPreset').value === 'custom') return;
+  const [wc, ww] = $('stWinPreset').value.split(',').map(Number);
+  $('stWc').value = wc; $('stWw').value = ww;
+});
+['stWc', 'stWw'].forEach((id) => {
+  $(id).addEventListener('input', () => { $('stWinPreset').value = 'custom'; });
+});
+$('previewCtBtn').addEventListener('click', () => {
+  $('tpick').checked = true;
+  syncMode();
+  $('openCt').click();
+});
+
+/* ------------------------------------------------------------ jobs */
+let polling = null, currentId = null;
+function renderJobs(list) {
+  const ul = $('jobs'); ul.innerHTML = '';
+  if (!list.length) { ul.innerHTML = '<li style="cursor:default;color:var(--muted)">No runs yet</li>'; return; }
+  list.forEach((j) => {
+    const li = document.createElement('li'); li.dataset.id = j.id;
+    if (j.id === currentId) li.classList.add('active');
+    const p = j.params || {};
+    const name = p.source === 'edit'
+      ? `Edited path (${p.base_source || 'Phantom'})`
+      : p.source === 'aeropath' ? `AeroPath ${p.case}` : p.source === 'upload' ? (p.name || 'Imported CT') : 'Phantom';
+    const t = new Date((j.created || 0) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    li.innerHTML = `<span>${name} <span class="legend">${t}</span></span><span class="badge ${j.status}">${j.status}</span>`;
+    li.addEventListener('click', () => selectJob(j.id));
+    ul.appendChild(li);
+  });
+}
+async function refreshJobs() { try { renderJobs(await api('/api/jobs')); } catch (e) { /* ignore */ } }
+
+$('run').addEventListener('click', async () => {
+  const mode = targetMode();
+  const body = {
+    source: $('source').value, case: Number($('case').value || 1),
+    target_mode: mode === 'auto' ? 'auto' : 'manual',   // "pick on CT" and "manual" both send an explicit position
+    percentile: Number($('pct').value) / 100, ahead_mm: Number($('ahead').value),
+    radius: Number($('radius').value), min_diameter: Number($('mind').value),
+    camera_roll: Number($('camRoll').value) || 0, video: $('video').checked,
+  };
+  if (body.source === 'upload') {
+    if (!currentUpload) { setStatus('Import a CT first (file, image series, or a path).', true); return; }
+    body.upload_id = currentUpload.upload_id;
+    if (currentUpload.kind === 'images') {
+      body.stack = {
+        pixel_spacing_mm: Number($('stPx').value), slice_spacing_mm: Number($('stSl').value),
+        window_center: Number($('stWc').value), window_width: Number($('stWw').value),
+        first_slice: $('stFirst').value, invert: $('stInv').checked,
+      };
+      if (!(body.stack.pixel_spacing_mm > 0 && body.stack.slice_spacing_mm > 0 && body.stack.window_width > 0)) { setStatus('Pixel size, slice spacing and window width must be positive numbers.', true); return; }
+    }
+  }
+  if (mode === 'pick') {
+    if (!picked) { setStatus('Open the CT, click the nodule, and press "Use this location" first.', true); return; }
+    body.target = picked.target; body.radius = picked.radius;
+  }
+  if (mode === 'manual') {
+    const t = [$('tx').value, $('ty').value, $('tz').value].map(Number);
+    if (t.some((v) => Number.isNaN(v)) || [$('tx').value, $('ty').value, $('tz').value].some((v) => v === '')) { setStatus('Enter x, y and z for a manual target.', true); return; }
+    body.target = t;
+  }
+  if (body.source === 'phantom' && activePhantomNodule) {
+    body.phantom_nodule = activePhantomNodule;
+  }
+  try {
+    $('run').disabled = true;
+    const job = await api('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    currentId = job.id; setStatus('Queued...'); await refreshJobs(); watch(job.id);
+  } catch (e) { setStatus(e.message, true); $('run').disabled = false; }
+});
+
+function setStatus(msg, bad = false) { const s = $('status'); s.textContent = msg; s.style.color = bad ? 'var(--bad)' : ''; }
+function watch(id) {
+  clearInterval(polling);
+  polling = setInterval(async () => {
+    try {
+      const j = await api(`/api/jobs/${id}`);
+      const last = (j.log || '').trim().split('\n').slice(-3).join('\n');
+      setStatus(`${j.status}...\n${last}`);
+      $('logPre').textContent = j.log || '';
+      if (j.status === 'done' || j.status === 'error') {
+        clearInterval(polling); $('run').disabled = false; await refreshJobs();
+        if (j.status === 'error') setStatus(`Failed: ${(j.result && j.result.error) || 'unknown error'}`, true); else setStatus('Done.');
+        selectJob(id);
+      }
+    } catch (e) { clearInterval(polling); $('run').disabled = false; setStatus(e.message, true); }
+  }, 1500);
+}
+
+/* ------------------------------------------------------------ show a job */
+const METRIC_ROWS = [
+  ['length_mm', 'Route length', 'mm', 1], ['n_bifurcations', 'Bifurcations passed', '', 0],
+  ['min_diameter_mm', 'Smallest lumen diameter on the route', 'mm', 2], ['min_wall_clearance_mm', 'Smallest wall clearance', 'mm', 2],
+  ['min_bend_radius_mm', 'Tightest bend radius', 'mm', 1], ['fraction_inside_lumen', 'Route inside airway', '', 3],
+  ['exit_to_target_center_mm', 'Route end to target centre', 'mm', 1], ['gap_to_nodule_surface_mm', 'Remaining gap to nodule surface (outside the airway)', 'mm', 1],
+];
+async function selectJob(id) {
+  currentId = id; refreshJobs();
+  let j; try { j = await api(`/api/jobs/${id}`); } catch (e) { return; }
+  $('logPre').textContent = j.log || '';
+  const r = j.result;
+  const sum = $('summary');
+  if (!r) { sum.innerHTML = `<div class="empty">Run ${id} is ${j.status}...</div>`; return; }
+  if (!r.ok) { sum.innerHTML = `<h3>Failed</h3><div class="err"></div>`; sum.querySelector('.err').textContent = (r.error || '') + '\n' + (r.traceback || ''); clearScene(); return; }
+
+  const rows = METRIC_ROWS.map(([k, label, unit, d]) => `<tr><th>${label}</th><td>${fmt(r.metrics[k], d)} ${unit}</td></tr>`).join('');
+  const seg = r.segmentation || {}, tr = r.tree || {}, tg = r.target || {};
+  sum.innerHTML = `
+    <h3 style="margin-top:0"></h3>
+    ${(r.warnings || []).length ? '<ul class="warns">' + r.warnings.map((w) => `<li></li>`).join('') + '</ul>' : '<p class="legend">No warnings.</p>'}
+    <h2>Route</h2><table>${rows}</table>
+    <h2>Target</h2><table>
+      <tr><th>Position (physical LPS mm)</th><td>${(tg.target_mm || []).join(', ')}</td></tr>
+      <tr><th>How chosen</th><td id="howChosen"></td></tr>
+      <tr><th>Nodule radius</th><td>${r.target_radius_mm} mm</td></tr></table>
+    <h2>Airway model</h2><table>
+      <tr><th>Segmentation stopped at</th><td>${seg.threshold_hu} HU${seg.leak_detected ? ' (leak guard)' : ''}</td></tr>
+      <tr><th>Centerline tree</th><td>${tr.junctions} junctions, ${tr.endpoints} endpoints, ${tr.length_mm} mm</td></tr>
+      <tr><th>Run time</th><td>${r.seconds} s</td></tr></table>
+    <p class="hint">The automatic target is a point in the lung beyond a distal airway tip. The predicted airway tree is incomplete (it reaches roughly half of the true centerline), so the gap shown is partly under-segmentation, not routing quality.</p>`;
+  sum.querySelectorAll('.warns li').forEach((li, i) => { li.textContent = r.warnings[i]; });
+  sum.querySelector('h3').textContent = r.source === 'aeropath' ? 'AeroPath case ' + r.case : r.source === 'upload' ? 'Imported CT: ' + (r.name || 'file') : 'Synthetic phantom';
+  $('howChosen').textContent = tg.target || '';
+
+  const base = `/files/${id}`;
+  const out = r.outputs || {};
+  resetVideoRotation();
+  if (out.video) {
+    $('videoBox').innerHTML = `<video controls preload="metadata" src="${base}/${out.video}" style="max-width:100%;max-height:480px;display:block"></video>`;
+    $('videoMeta').innerHTML = '<p class="hint">640x480, 30 fps. The green line is the route, the blue ball marks the end of the path, and the yellow sphere is the target once within 50 mm.</p>';
+    applyVideoTransform();
+  } else {
+    $('videoBox').innerHTML = '<div class="empty">No video for this run (rendering was off).</div>';
+    $('videoMeta').innerHTML = '';
+  }
+
+  // 3D + stills need route.json
+  let route = null;
+  try { route = await (await fetch(`${base}/route.json`)).json(); } catch (e) { /* none */ }
+  const st = $('stills');
+  if (route && out.stills) {
+    const n = (route.bifurcations || []).length;
+    const items = [];
+    for (let i = 1; i <= n; i++) items.push([`bifurcation_${String(i).padStart(2, '0')}.png`, `Before bifurcation ${i} (${fmt(route.bifurcations[i - 1].s_mm, 0)} mm along the route)`]);
+    items.push(['end_of_route.png', 'End of the route']);
+    st.innerHTML = '<div class="stills">' + items.map(([f, c]) => `<figure><img loading="lazy" src="${base}/stills/${f}" alt="${c}" data-full="${base}/stills/${f}"><figcaption>${c}</figcaption></figure>`).join('') + '</div>';
+    st.querySelectorAll('img').forEach((im) => im.addEventListener('click', () => { $('dlgImg').src = im.dataset.full; $('dlg').showModal(); }));
+  } else st.innerHTML = '<div class="empty">No stills for this run.</div>';
+  if (route && out.mesh_glb) await viewer.load(route, `${base}/${out.mesh_glb}`); else clearScene();
+  await loadJobEdit(id, route);
+}
+
+let selectedEditEnd = null;
+
+async function previewBranch(jobId, pt) {
+  try {
+    const replan = await api(`/api/jobs/${jobId}/replan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ end: pt }),
+    });
+    selectedEditEnd = pt;
+    viewer.preview(replan);
+    const m = replan.metrics || {};
+    $('previewMetricsText').textContent = `Length: ${fmt(m.length_mm, 0)} mm | Gap to nodule surface: ${fmt(m.gap_to_nodule_surface_mm, 1)} mm | Min lumen: ${fmt(m.min_diameter_mm, 1)} mm | Bifurcations: ${m.n_bifurcations || 0}`;
+    $('editPreviewMetrics').style.display = 'block';
+    $('btnResetRoute').style.display = 'inline-block';
+    $('btnSaveEditedRoute').disabled = false;
+  } catch (e) {
+    alert('Cannot preview this branch: ' + e.message);
+  }
+}
+
+async function loadJobEdit(id, route) {
+  $('editRoutePanel').hidden = true;
+  $('btnResetRoute').style.display = 'none';
+  $('btnSaveEditedRoute').disabled = true;
+  $('editPreviewMetrics').style.display = 'none';
+  $('altTableBody').innerHTML = '';
+  selectedEditEnd = null;
+  viewer.clearPreview();
+
+  if (!route) return;
+  try {
+    const tree = await api(`/api/jobs/${id}/tree`);
+    viewer.loadTree(tree, (pt) => previewBranch(id, pt));
+    const alts = await api(`/api/jobs/${id}/alternatives`);
+    if (alts && alts.length) {
+      $('editRoutePanel').hidden = false;
+      const tbody = $('altTableBody');
+      tbody.innerHTML = '';
+      alts.forEach((c, idx) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--line)';
+        tr.innerHTML = `
+          <td style="padding:4px 6px">${idx + 1}</td>
+          <td style="padding:4px 6px">${c.point_mm.map((v) => v.toFixed(1)).join(', ')}</td>
+          <td style="padding:4px 6px">${fmt(c.gap_mm, 1)} mm</td>
+          <td style="padding:4px 6px">${fmt(c.route_length_mm, 0)} mm</td>
+          <td style="padding:4px 6px">${fmt(c.min_diameter_mm, 1)} mm</td>
+          <td style="padding:4px 6px">${fmt(c.approach_angle_deg, 0)}°</td>
+          <td style="padding:4px 6px"><button type="button" style="padding:3px 8px;font-size:11px">Preview</button></td>
+        `;
+        tr.querySelector('button').addEventListener('click', () => previewBranch(id, c.point_mm));
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (e) {
+    // Runs without an airway mask have nothing to edit; anything else is a real error, so do not hide it.
+    console.error('edit-route panel failed to load', e);
+  }
+}
+
+$('btnResetRoute').addEventListener('click', () => {
+  viewer.clearPreview();
+  selectedEditEnd = null;
+  $('editPreviewMetrics').style.display = 'none';
+  $('btnResetRoute').style.display = 'none';
+  $('btnSaveEditedRoute').disabled = true;
+});
+
+$('btnSaveEditedRoute').addEventListener('click', async () => {
+  if (!selectedEditEnd || !currentId) return;
+  try {
+    $('btnSaveEditedRoute').disabled = true;
+    const body = { end: selectedEditEnd, video: $('video').checked, camera_roll: Number($('camRoll').value) || 0 };
+    const job = await api(`/api/jobs/${currentId}/edits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    currentId = job.id;
+    setStatus('Saving and rendering edited route...');
+    await refreshJobs();
+    watch(job.id);
+  } catch (e) {
+    setStatus(e.message, true);
+    $('btnSaveEditedRoute').disabled = false;
+  }
+});
+$('dlg').addEventListener('click', () => $('dlg').close());
+$('goFly').addEventListener('click', () => viewer.fly());
+
+/* ------------------------------------------------------------ video player rotation */
+let vidAngle = 0;
+let vidFlip = false;
+
+function applyVideoTransform() {
+  $('vidAngleSlider').value = vidAngle;
+  $('vidAngleVal').textContent = `${vidAngle}°${vidFlip ? ' (flipped)' : ''}`;
+  const v = document.querySelector('#videoBox video');
+  if (!v) return;
+  const rad = Math.abs(vidAngle) * (Math.PI / 180);
+  const w = 640, h = 480;
+  const bbW = w * Math.abs(Math.cos(rad)) + h * Math.abs(Math.sin(rad));
+  const bbH = w * Math.abs(Math.sin(rad)) + h * Math.abs(Math.cos(rad));
+  const scale = Math.min(1.0, w / bbW, h / bbH);
+  const flip = vidFlip ? -1 : 1;
+  v.style.transformOrigin = 'center center';
+  v.style.transform = `rotate(${vidAngle}deg) scale(${flip * scale}, ${scale})`;
+  v.style.transition = 'transform 0.15s ease-out';
+}
+
+function resetVideoRotation() {
+  vidAngle = 0;
+  vidFlip = false;
+  applyVideoTransform();
+}
+
+function setVideoAngle(deg) {
+  let a = Math.round(deg);
+  while (a > 180) a -= 360;
+  while (a < -180) a += 360;
+  vidAngle = a;
+  applyVideoTransform();
+}
+
+$('vidRotCCW').addEventListener('click', () => setVideoAngle(vidAngle - 90));
+$('vidRotCW').addEventListener('click', () => setVideoAngle(vidAngle + 90));
+$('vidRot180').addEventListener('click', () => setVideoAngle(vidAngle + 180));
+$('vidFlipH').addEventListener('click', () => { vidFlip = !vidFlip; applyVideoTransform(); });
+$('vidAngleSlider').addEventListener('input', () => { vidAngle = Number($('vidAngleSlider').value); applyVideoTransform(); });
+$('vidRotReset').addEventListener('click', () => resetVideoRotation());
+
+/* ------------------------------------------------------------ 3D viewer */
+const viewer = (() => {
+  const el = $('view');
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  el.appendChild(renderer.domElement);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0d1117);
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.2, 5000); camera.up.set(0, 0, 1);
+  const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+  const amb = new THREE.AmbientLight(0xffffff, 0.8); scene.add(amb);
+  const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(1, -2, 2); scene.add(dl);
+  const head = new THREE.PointLight(0xffffff, 0, 0); scene.add(head); // used in inside view
+  let group = null, meshMat = null, route = null, pts = [], tans = [], marker = null, center = new THREE.Vector3(), radiusFit = 200;
+  let treeGroup = null, previewGroup = null, treeClickCb = null, treeNodes = [];
+  let insideView = false;
+  let nrm = [], lookYaw = 0, lookPitch = 0, lookRoll = 0, playing = false, lastT = 0;   // free look is an offset from the route direction
+
+  // Up vectors along the route by parallel transport, starting from "world up" (superior), so the view stays upright.
+  function makeFrames() {
+    nrm = []; if (!tans.length) return;
+    const n = new THREE.Vector3(0, 0, 1); if (Math.abs(tans[0].dot(n)) > 0.95) n.set(0, 1, 0);
+    n.addScaledVector(tans[0], -n.dot(tans[0])).normalize(); nrm.push(n.clone());
+    for (let i = 1; i < tans.length; i++) {
+      n.addScaledVector(tans[i], -n.dot(tans[i])); if (n.lengthSq() < 1e-9) n.copy(nrm[i - 1]); n.normalize(); nrm.push(n.clone());
+    }
+  }
+  function applyCamera(i) {
+    const f = tans[i].clone().normalize(), u = nrm[i].clone(), r = new THREE.Vector3().crossVectors(f, u).normalize();
+    const cy = Math.cos(lookYaw), sy = Math.sin(lookYaw), cp = Math.cos(lookPitch), sp = Math.sin(lookPitch);
+    const f1 = f.clone().multiplyScalar(cy).addScaledVector(r, sy);                    // yaw about the up axis
+    const f2 = f1.clone().multiplyScalar(cp).addScaledVector(u, sp);                   // then pitch up/down
+    const u2 = u.clone().multiplyScalar(cp).addScaledVector(f1, -sp);
+    if (Math.abs(lookRoll) > 1e-5) {
+      u2.applyAxisAngle(f2, lookRoll);
+    }
+    camera.position.copy(pts[i]); camera.up.copy(u2); camera.lookAt(pts[i].clone().add(f2)); head.position.copy(pts[i]);
+  }
+  function syncRollUI() {
+    const deg = Math.round((lookRoll * 180) / Math.PI);
+    $('rollSlider').value = deg;
+    $('rollVal').textContent = `${deg}°`;
+  }
+  function setRoll(rad) {
+    lookRoll = rad;
+    while (lookRoll > Math.PI) lookRoll -= 2 * Math.PI;
+    while (lookRoll < -Math.PI) lookRoll += 2 * Math.PI;
+    syncRollUI();
+    setPos(Number($('pos').value));
+  }
+  function resetLook() {
+    lookYaw = 0; lookPitch = 0; lookRoll = 0;
+    syncRollUI();
+    camera.fov = 100; camera.updateProjectionMatrix(); setPos(Number($('pos').value));
+  }
+  function setPlaying(on) {
+    playing = on; lastT = performance.now(); $('play').textContent = on ? 'Pause' : 'Play fly-through';
+  }
+
+  function clearPreview() {
+    if (previewGroup) {
+      scene.remove(previewGroup);
+      previewGroup.traverse((o) => { o.geometry && o.geometry.dispose(); });
+      previewGroup = null;
+    }
+  }
+  function dispose() {
+    if (group) { scene.remove(group); group.traverse((o) => { o.geometry && o.geometry.dispose(); }); group = null; }
+    if (treeGroup) { scene.remove(treeGroup); treeGroup.traverse((o) => { o.geometry && o.geometry.dispose(); }); treeGroup = null; }
+    treeNodes = [];
+    clearPreview();
+  }
+  function sphere(p, r, color, opacity = 1) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35, transparent: opacity < 1, opacity }));
+    m.position.copy(p); return m;
+  }
+  function resize() {
+    const w = el.clientWidth, h = el.clientHeight; if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(el);
+
+  function loadTree(treeData, onClick) {
+    if (treeGroup) { scene.remove(treeGroup); treeGroup.traverse((o) => { o.geometry && o.geometry.dispose(); }); treeGroup = null; }
+    treeNodes = []; treeClickCb = onClick;
+    if (!treeData || !treeData.nodes || !treeData.edges) return;
+    treeGroup = new THREE.Group();
+    const posArr = [];
+    for (const [a, b] of treeData.edges) {
+      const p1 = treeData.nodes[a], p2 = treeData.nodes[b];
+      posArr.push(p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]);
+    }
+    const treeGeo = new THREE.BufferGeometry();
+    treeGeo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+    const treeMat = new THREE.LineBasicMaterial({ color: 0x4a7a96, transparent: true, opacity: 0.6 });
+    treeGroup.add(new THREE.LineSegments(treeGeo, treeMat));
+
+    treeData.nodes.forEach((p, idx) => {
+      const isExit = idx === treeData.exit_node, isOrigin = idx === treeData.origin_node;
+      const col = isExit ? 0x2b82ff : isOrigin ? 0x38e8ff : 0x6a899c;
+      const r = isExit || isOrigin ? 1.6 : 0.6;
+      const sm = sphere(new THREE.Vector3(...p), r, col, isExit || isOrigin ? 0.9 : 0.35);
+      sm.userData = { pt: p, idx };
+      treeGroup.add(sm);
+      treeNodes.push(sm);
+    });
+    if (insideView) treeGroup.visible = false;
+    scene.add(treeGroup);
+  }
+
+  function preview(replan) {
+    clearPreview();
+    if (!replan || !replan.path || !replan.path.points_mm) return;
+    previewGroup = new THREE.Group();
+    const ppts = replan.path.points_mm.map((p) => new THREE.Vector3(...p));
+    if (ppts.length > 1) {
+      const curve = new THREE.CatmullRomCurve3(ppts, false, 'centripetal');
+      previewGroup.add(new THREE.Mesh(
+        new THREE.TubeGeometry(curve, Math.min(ppts.length, 600), 0.75, 6, false),
+        new THREE.MeshBasicMaterial({ color: 0xffa500 })
+      ));
+    }
+    previewGroup.add(sphere(ppts[ppts.length - 1], 1.8, 0x2b82ff));
+    if (route && route.target && route.target.center_mm) {
+      const endP = ppts[ppts.length - 1];
+      const tgP = new THREE.Vector3(...route.target.center_mm);
+      const gapGeo = new THREE.BufferGeometry().setFromPoints([endP, tgP]);
+      const gapMat = new THREE.LineDashedMaterial({ color: 0xffd23f, dashSize: 3, gapSize: 2 });
+      const gapLine = new THREE.Line(gapGeo, gapMat);
+      gapLine.computeLineDistances();
+      previewGroup.add(gapLine);
+    }
+    scene.add(previewGroup);
+  }
+
+  async function load(r, glbUrl) {
+    dispose(); route = r; insideView = false; $('inside').checked = false; controls.enabled = true;
+    group = new THREE.Group(); scene.add(group);
+    pts = r.path.points_mm.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+    tans = r.path.tangent.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+    makeFrames(); lookYaw = 0; lookPitch = 0; lookRoll = 0; syncRollUI(); setPlaying(false);
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.min(pts.length, 600), 0.6, 6, false), new THREE.MeshBasicMaterial({ color: 0x2ee66b })));
+    const tg = new THREE.Vector3(...r.target.center_mm);
+    group.add(sphere(tg, r.target.radius_mm, 0xffd23f, 0.6));
+    group.add(sphere(pts[pts.length - 1], 1.8, 0x2b82ff));
+    marker = sphere(pts[0].clone(), 1.8, 0x38e8ff); group.add(marker);
+    await new Promise((res) => new GLTFLoader().load(glbUrl, (g) => {
+      meshMat = new THREE.MeshStandardMaterial({ color: 0xd9857a, roughness: 0.6, metalness: 0, side: THREE.DoubleSide, transparent: true, opacity: $('opac').value / 100, depthWrite: false });
+      g.scene.traverse((o) => {
+        if (o.isMesh) { o.material = meshMat; o.renderOrder = 1; o.geometry.computeVertexNormals(); }  // match normals to winding
+      });
+      group.add(g.scene); res();
+    }, undefined, () => res()));
+    const box = new THREE.Box3().setFromObject(group); box.getCenter(center);
+    radiusFit = Math.max(box.getSize(new THREE.Vector3()).length() * 0.6, 60);
+    $('pos').value = 0; setPos(0); setView('front'); resize();
+  }
+  function setView(kind) {
+    insideView = false; $('inside').checked = false; controls.enabled = true; camera.fov = 45; camera.near = 0.2; camera.updateProjectionMatrix();
+    const d = radiusFit * 1.8;
+    const dir = kind === 'side' ? new THREE.Vector3(1, 0, 0) : kind === 'top' ? new THREE.Vector3(0, -0.001, 1) : new THREE.Vector3(0, -1, 0);
+    camera.position.copy(center).addScaledVector(dir, d); controls.target.copy(center); controls.update(); head.intensity = 0;
+  }
+  function setPos(v) {
+    if (!pts.length) return;
+    const i = Math.round((v / 1000) * (pts.length - 1)); marker.position.copy(pts[i]);
+    const s = route.path.step_mm * i;
+    $('posLabel').textContent = `${s.toFixed(0)} mm along the route, lumen diameter ${(route.path.radius_mm[i] * 2).toFixed(1)} mm`;
+    if (insideView) applyCamera(i);
+  }
+  function setInside(on) {
+    insideView = on; controls.enabled = !on; $('inside').checked = on;
+    if (!on) setPlaying(false);
+    lookYaw = 0; lookPitch = 0; lookRoll = 0; syncRollUI();
+    if (marker) marker.visible = !on;
+    if (treeGroup) treeGroup.visible = !on;
+    if (on) {
+      // bronchoscope look: dark scene, a headlight that falls off with distance, opaque wall
+      camera.fov = 100; camera.near = 0.15; camera.updateProjectionMatrix();
+      amb.intensity = 0.03; dl.intensity = 0; head.intensity = 30; head.distance = 0; head.decay = 1.6;
+      meshMat.opacity = 1; meshMat.depthWrite = true; meshMat.color.set(0xe39a8c);
+    } else {
+      amb.intensity = 0.8; dl.intensity = 1.2; head.intensity = 0;
+      meshMat.opacity = $('opac').value / 100; meshMat.depthWrite = false; meshMat.color.set(0xd9857a); setView('front');
+    }
+    setPos(Number($('pos').value));
+  }
+  $('pos').addEventListener('input', () => setPos(Number($('pos').value)));
+  $('inside').addEventListener('change', () => setInside($('inside').checked));
+  $('opac').addEventListener('input', () => { if (meshMat && !insideView) meshMat.opacity = $('opac').value / 100; });
+  $('vFront').addEventListener('click', () => setView('front')); $('vSide').addEventListener('click', () => setView('side')); $('vTop').addEventListener('click', () => setView('top'));
+  // --- free look (inside view): pointer drag, wheel zoom, double-click reset, arrow keys ---
+  const cv = renderer.domElement; cv.tabIndex = 0; cv.style.touchAction = 'none';
+  let drag = null;
+  cv.addEventListener('pointerdown', (e) => {
+    if (!insideView) return;
+    drag = { x: e.clientX, y: e.clientY };
+    try { cv.setPointerCapture(e.pointerId); } catch (_) { /* synthetic or inactive pointer */ }
+    cv.focus();
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (!insideView || !drag) return;
+    if (e.shiftKey) {
+      lookRoll += (e.clientX - drag.x) * 0.008;
+      while (lookRoll > Math.PI) lookRoll -= 2 * Math.PI;
+      while (lookRoll < -Math.PI) lookRoll += 2 * Math.PI;
+      syncRollUI();
+      drag = { x: e.clientX, y: e.clientY };
+      setPos(Number($('pos').value));
+      return;
+    }
+    const k = 0.0055 * (camera.fov / 100);                      // finer steps when zoomed in
+    lookYaw -= (e.clientX - drag.x) * k; lookPitch += (e.clientY - drag.y) * k;   // "grab the scene"
+    lookPitch = Math.max(-1.45, Math.min(1.45, lookPitch)); drag = { x: e.clientX, y: e.clientY };
+    setPos(Number($('pos').value));
+  });
+  const endDrag = () => { drag = null; };
+  cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+  cv.addEventListener('wheel', (e) => {
+    if (!insideView) return; e.preventDefault();
+    camera.fov = Math.max(35, Math.min(120, camera.fov + Math.sign(e.deltaY) * 4)); camera.updateProjectionMatrix();
+  }, { passive: false });
+  cv.addEventListener('dblclick', () => { if (insideView) resetLook(); });
+  cv.addEventListener('keydown', (e) => {
+    if (!insideView) return;
+    const step = 0.08, m = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[e.key];
+    if (m) { e.preventDefault(); lookYaw += m[0]; lookPitch = Math.max(-1.45, Math.min(1.45, lookPitch + m[1])); setPos(Number($('pos').value)); }
+    else if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); setRoll(lookRoll - (15 * Math.PI / 180)); }
+    else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setRoll(lookRoll + (15 * Math.PI / 180)); }
+    else if (e.key === ' ') { e.preventDefault(); $('play').click(); }
+    else if (e.key === 'Escape' || e.key === '0') resetLook();
+  });
+  $('lookReset').addEventListener('click', () => { if (insideView) resetLook(); });
+  $('lookBack').addEventListener('click', () => { if (insideView) { lookYaw = lookYaw > 1.5 ? 0 : Math.PI; lookPitch = 0; setPos(Number($('pos').value)); } });
+  $('rollCCW').addEventListener('click', () => { if (insideView) setRoll(lookRoll - (15 * Math.PI / 180)); });
+  $('rollCW').addEventListener('click', () => { if (insideView) setRoll(lookRoll + (15 * Math.PI / 180)); });
+  $('rollSlider').addEventListener('input', () => { if (insideView) setRoll((Number($('rollSlider').value) * Math.PI) / 180); });
+  $('speed').addEventListener('input', () => { $('speedVal').textContent = `${$('speed').value} mm/s`; });
+  $('play').addEventListener('click', () => {
+    if (!pts.length) return;
+    if (playing) { setPlaying(false); return; }
+    if (!insideView) setInside(true);
+    if (Number($('pos').value) >= 1000) { $('pos').value = 0; setPos(0); }
+    setPlaying(true);
+  });
+  function fly() { showTab('view3d'); resize(); if (!insideView) setInside(true); $('pos').value = 0; setPos(0); setPlaying(true); }
+
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  let pointerStart = null;
+  cv.addEventListener('pointerdown', (e) => {
+    pointerStart = { x: e.clientX, y: e.clientY };
+  });
+  cv.addEventListener('pointerup', (e) => {
+    if (!pointerStart) return;
+    const dist = Math.hypot(e.clientX - pointerStart.x, e.clientY - pointerStart.y);
+    pointerStart = null;
+    if (dist > 6 || insideView || !treeNodes.length || !treeClickCb) return;
+    const rect = cv.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(treeNodes);
+    if (hits.length > 0) {
+      treeClickCb(hits[0].object.userData.pt);
+    }
+  });
+
+  (function loop() {
+    requestAnimationFrame(loop);
+    const now = performance.now();
+    if (playing && pts.length) {
+      const dt = Math.min((now - lastT) / 1000, 0.25);  // capped so a long pause (hidden tab) cannot jump ahead
+      const total = route.path.step_mm * (pts.length - 1);
+      const v = Math.min(1000, Number($('pos').value) + (Number($('speed').value) * dt / total) * 1000);
+      $('pos').value = v; setPos(v); if (v >= 1000) setPlaying(false);
+    }
+    lastT = now;
+    if (!insideView) controls.update();
+    renderer.render(scene, camera);
+  })();
+  window.__viewer = { head, amb, dl, camera, scene, get meshMat() { return meshMat; }, renderer };  // console debugging
+  return { load, resize, clear: dispose, fly, loadTree, preview, clearPreview };
+})();
+function clearScene() {
+  viewer.clear();
+  $('editRoutePanel').hidden = true;
+  $('btnResetRoute').style.display = 'none';
+  $('btnSaveEditedRoute').disabled = true;
+  $('editPreviewMetrics').style.display = 'none';
+  $('altTableBody').innerHTML = '';
+  selectedEditEnd = null;
+}
+
+/* ------------------------------------------------------------ CT viewer: scroll through the slices, click the nodule */
+let ct = null;                       // {id, size:[nx,ny,nz], spacing:[sx,sy,sz], origin, D (9), name, hint}
+let cur = { i: 0, j: 0, k: 0 };      // crosshair, voxel indices (x, y, z)
+let picked = null;                   // {target:[x,y,z] physical LPS mm, radius}
+let placed = false;                  // has the user clicked a point yet
+const ctImgs = { ax: null, co: null, sa: null }, ctReq = { ax: 0, co: 0, sa: 0 }, ctKey = { ax: '', co: '', sa: '' };
+const PLANE = { ax: { cv: 'cvAx', name: 'axial' }, co: { cv: 'cvCo', name: 'coronal' }, sa: { cv: 'cvSa', name: 'sagittal' } };
+let huTimer = null;
+
+const ctPhys = (i, j, k) => {   // physical LPS mm of a voxel centre: origin + D * (index * spacing)
+  const v = [i * ct.spacing[0], j * ct.spacing[1], k * ct.spacing[2]];
+  return [0, 1, 2].map((r) => ct.origin[r] + ct.D[r * 3] * v[0] + ct.D[r * 3 + 1] * v[1] + ct.D[r * 3 + 2] * v[2]);
+};
+const ctIdx = (p) => {          // inverse (D is orthonormal)
+  const d = [p[0] - ct.origin[0], p[1] - ct.origin[1], p[2] - ct.origin[2]];
+  return [0, 1, 2].map((c) => Math.round((ct.D[c] * d[0] + ct.D[3 + c] * d[1] + ct.D[6 + c] * d[2]) / ct.spacing[c]));
+};
+const ctWin = () => ({ wc: Number($('ctWc').value), ww: Math.max(1, Number($('ctWw').value)) });
+const clampIdx = () => {
+  cur.i = Math.max(0, Math.min(ct.size[0] - 1, cur.i)); cur.j = Math.max(0, Math.min(ct.size[1] - 1, cur.j)); cur.k = Math.max(0, Math.min(ct.size[2] - 1, cur.k));
+};
+
+// geometry of a pane: pixels per mm (fit the pane width) and canvas height in px, per plane
+function ctGeom(p) {
+  const [nx, ny, nz] = ct.size, [sx, sy, sz] = ct.spacing;
+  const w = Math.max(200, $(PLANE[p].cv).parentElement.clientWidth || 400);
+  const mmW = p === 'sa' ? ny * sy : nx * sx, mmH = p === 'ax' ? ny * sy : nz * sz;
+  const s = w / mmW;
+  return { w, h: Math.round(mmH * s), s };
+}
+function ctDraw(p) {
+  if (!ct) return;
+  const cv = $(PLANE[p].cv), g = ctGeom(p), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(g.w * dpr); cv.height = Math.round(g.h * dpr); cv.style.height = g.h + 'px';
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.fillStyle = '#000'; c.fillRect(0, 0, g.w, g.h);
+  const img = ctImgs[p]; if (img) { c.imageSmoothingEnabled = true; c.drawImage(img, 0, 0, g.w, g.h); }
+  const [nx, ny, nz] = ct.size, [sx, sy, sz] = ct.spacing;
+  const px = p === 'sa' ? (cur.j + 0.5) * sy * g.s : (cur.i + 0.5) * sx * g.s;
+  const py = p === 'ax' ? (cur.j + 0.5) * sy * g.s : (nz - 1 - cur.k + 0.5) * sz * g.s;
+  const r = Math.max(2, Number($('ctRad').value) * g.s);
+  c.strokeStyle = 'rgba(255,210,63,0.9)'; c.lineWidth = 1.5; c.beginPath(); c.arc(px, py, r, 0, Math.PI * 2); c.stroke();
+  c.strokeStyle = 'rgba(56,232,255,0.7)'; c.lineWidth = 1; c.beginPath();
+  c.moveTo(px, 0); c.lineTo(px, py - r - 3); c.moveTo(px, py + r + 3); c.lineTo(px, g.h);
+  c.moveTo(0, py); c.lineTo(px - r - 3, py); c.moveTo(px + r + 3, py); c.lineTo(g.w, py); c.stroke();
+  c.fillStyle = '#9fb0c3'; c.font = '11px system-ui'; c.textBaseline = 'middle';
+  const side = p === 'sa' ? ['A', 'P'] : ['R', 'L'], vert = p === 'ax' ? ['A', 'P'] : ['S', 'I'];
+  c.textAlign = 'left'; c.fillText(side[0], 4, g.h / 2); c.textAlign = 'right'; c.fillText(side[1], g.w - 4, g.h / 2);
+  c.textAlign = 'center'; c.fillText(vert[0], g.w / 2, 9); c.fillText(vert[1], g.w / 2, g.h - 9);
+}
+function ctLoadPlane(p, force = false) {
+  if (!ct) return;
+  const idx = p === 'ax' ? cur.k : p === 'co' ? cur.j : cur.i, { wc, ww } = ctWin();
+  const key = `${idx}|${wc}|${ww}`;
+  if (!force && ctKey[p] === key) { ctDraw(p); return; }
+  ctKey[p] = key; const seq = ++ctReq[p];
+  const im = new Image();
+  im.onload = () => { if (seq === ctReq[p]) { ctImgs[p] = im; ctDraw(p); } };
+  im.src = `/api/ct/${ct.id}/slice?plane=${PLANE[p].name}&i=${idx}&wc=${wc}&ww=${ww}`;
+}
+function ctRefresh(planes = ['ax', 'co', 'sa']) {
+  if (!ct) return;
+  clampIdx();
+  planes.forEach((p) => ctLoadPlane(p));
+  ['ax', 'co', 'sa'].filter((p) => !planes.includes(p)).forEach(ctDraw);
+  $('ctSlice').value = cur.k;
+  const z = ctPhys(cur.i, cur.j, cur.k);
+  $('ctSliceLabel').textContent = `slice ${cur.k + 1} of ${ct.size[2]}`;
+  const ph = z.map((v) => v.toFixed(1)).join(', ');
+  $('ctReadout').textContent = (placed ? 'Nodule at ' : 'Cursor at ') + `${ph} mm (physical LPS), voxel ${cur.i}, ${cur.j}, ${cur.k}` + (ct.huText ? `, ${ct.huText}` : '');
+  clearTimeout(huTimer);
+  huTimer = setTimeout(async () => {
+    try { const r = await api(`/api/ct/${ct.id}/hu?i=${cur.i}&j=${cur.j}&k=${cur.k}`); ct.huText = `${r.hu} HU`; $('ctReadout').textContent = $('ctReadout').textContent.replace(/, -?\d+ HU$/, '') + `, ${r.hu} HU`; } catch (e) { /* ignore */ }
+  }, 120);
+  $('ctUse').disabled = !placed;
+  if ($('source').value === 'phantom') {
+    $('ctPlacePhantom').hidden = false;
+    $('ctPlacePhantom').disabled = !placed;
+  } else {
+    $('ctPlacePhantom').hidden = true;
+  }
+}
+function ctRedrawAll() { if (ct && $('ctview').classList.contains('active')) { ['ax', 'co', 'sa'].forEach(ctDraw); } }
+new ResizeObserver(() => ctRedrawAll()).observe($('ctview'));
+
+// pointer: click a pane to place the nodule (and move the crosshair)
+function ctClick(p, e) {
+  if (!ct) return;
+  const cv = $(PLANE[p].cv), rect = cv.getBoundingClientRect(), g = ctGeom(p);
+  const x = (e.clientX - rect.left) * (g.w / rect.width), y = (e.clientY - rect.top) * (g.h / rect.height);
+  const [nx, ny, nz] = ct.size, [sx, sy, sz] = ct.spacing;
+  if (p === 'ax') { cur.i = Math.floor(x / (sx * g.s)); cur.j = Math.floor(y / (sy * g.s)); }
+  else if (p === 'co') { cur.i = Math.floor(x / (sx * g.s)); cur.k = nz - 1 - Math.floor(y / (sz * g.s)); }
+  else { cur.j = Math.floor(x / (sy * g.s)); cur.k = nz - 1 - Math.floor(y / (sz * g.s)); }
+  placed = true; ct.huText = '';
+  ctRefresh();
+}
+['ax', 'co', 'sa'].forEach((p) => $(PLANE[p].cv).addEventListener('click', (e) => ctClick(p, e)));
+
+// scroll through slices: wheel over any image, the slider, or the keyboard
+function ctStep(d) { if (!ct) return; cur.k += d; ct.huText = ''; ctRefresh(['ax']); }
+$('cvAx').addEventListener('wheel', (e) => { e.preventDefault(); ctStep(-Math.sign(e.deltaY) * (e.shiftKey ? 5 : 1)); }, { passive: false });
+$('paneCo').addEventListener('wheel', (e) => { e.preventDefault(); cur.j += Math.sign(e.deltaY) * (e.shiftKey ? 5 : 1); ct.huText = ''; ctRefresh(['co']); }, { passive: false });
+$('paneSa').addEventListener('wheel', (e) => { e.preventDefault(); cur.i += Math.sign(e.deltaY) * (e.shiftKey ? 5 : 1); ct.huText = ''; ctRefresh(['sa']); }, { passive: false });
+$('ctSlice').addEventListener('input', () => { if (!ct) return; cur.k = Number($('ctSlice').value); ct.huText = ''; ctRefresh(['ax']); });
+$('cvAx').addEventListener('keydown', (e) => {
+  const m = { ArrowUp: 1, ArrowDown: -1, PageUp: 5, PageDown: -5 }[e.key];
+  if (m) { e.preventDefault(); ctStep(m); }
+});
+['ctWc', 'ctWw'].forEach((id) => $(id).addEventListener('input', () => { $('ctPreset').value = ''; ctRefresh(); }));
+$('ctPreset').addEventListener('change', () => { const v = $('ctPreset').value; if (!v) return; const [c, w] = v.split(','); $('ctWc').value = c; $('ctWw').value = w; ctRefresh(); });
+$('ctRad').addEventListener('input', () => { $('radius').value = $('ctRad').value; ctRedrawAll(); });
+$('radius').addEventListener('input', () => { $('ctRad').value = $('radius').value; ctRedrawAll(); });
+
+// choose the point: it becomes the run's target
+$('ctUse').addEventListener('click', () => {
+  picked = { target: ctPhys(cur.i, cur.j, cur.k).map((v) => Math.round(v * 10) / 10), radius: Number($('ctRad').value) };
+  $('pickInfo').textContent = `Target: ${picked.target.join(', ')} mm (physical LPS), radius ${picked.radius} mm\nCT: ${ct.name}`;
+  $('tpick').checked = true; syncMode();
+  setStatus('Nodule chosen. Press "Run planning" to plan the route to it.');
+});
+
+let activePhantomNodule = null;
+
+$('ctPlacePhantom').addEventListener('click', async () => {
+  if (!ct) return;
+  const p = ctPhys(cur.i, cur.j, cur.k).map((v) => Math.round(v * 10) / 10);
+  const r = Number($('ctRad').value) || 5.0;
+  const hu = 30.0;
+  $('ctReadout').textContent = `Placing nodule at ${p.join(', ')} mm...`;
+  try {
+    const d = await api('/api/ct/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'phantom', nodule: { center: p, radius_mm: r, hu } }),
+    });
+    activePhantomNodule = { center: p, radius_mm: r, hu };
+    picked = { target: p, radius: r };
+    ct = { id: d.ct_id, size: d.size, spacing: d.spacing, origin: d.origin, D: d.direction, name: d.name, hint: d.hint, huText: '' };
+    $('ctName').textContent = `${d.name}: ${d.size.join(' x ')} voxels, ${d.spacing.join(' x ')} mm`;
+    Object.keys(ctKey).forEach((k) => { ctKey[k] = ''; ctImgs[k] = null; });
+    placed = true;
+    ctRefresh();
+    $('ctReadout').textContent = `Placed custom nodule in phantom at ${p.join(', ')} mm (physical LPS), radius ${r} mm. Press "Run planning" to target it.`;
+    $('pickInfo').textContent = `Custom phantom nodule: at ${p.join(', ')} mm, radius ${r} mm`;
+    $('tpick').checked = true; syncMode();
+    setStatus('Custom nodule placed in phantom. Press "Run planning" to compute the route to it.');
+  } catch (e) {
+    $('ctReadout').innerHTML = `<span style="color:var(--bad)">Cannot place nodule: ${e.message}</span>`;
+  }
+});
+
+async function openCt() {
+  const src = $('source').value, req = { source: src, case: Number($('case').value || 1) };
+  if (src === 'upload') {
+    if (!currentUpload) { $('pickInfo').textContent = 'Import a CT first (file, image series, or a path).'; return; }
+    req.upload_id = currentUpload.upload_id;
+    if (currentUpload.kind === 'images') req.stack = {
+      pixel_spacing_mm: Number($('stPx').value), slice_spacing_mm: Number($('stSl').value),
+      window_center: Number($('stWc').value), window_width: Number($('stWw').value), first_slice: $('stFirst').value, invert: $('stInv').checked,
+    };
+  } else if (src === 'phantom' && activePhantomNodule) {
+    req.nodule = activePhantomNodule;
+  }
+  $('pickInfo').textContent = 'Loading the CT (a few seconds)...'; $('openCt').disabled = true;
+  try {
+    const d = await api('/api/ct/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
+    const same = ct && ct.id === d.ct_id;
+    ct = { id: d.ct_id, size: d.size, spacing: d.spacing, origin: d.origin, D: d.direction, name: d.name, hint: d.hint, huText: '' };
+    $('ctName').textContent = `${d.name}: ${d.size.join(' x ')} voxels, ${d.spacing.join(' x ')} mm`;
+    $('ctSlice').max = ct.size[2] - 1;
+    if (!same) {
+      Object.keys(ctKey).forEach((k) => { ctKey[k] = ''; ctImgs[k] = null; });
+      cur = { i: Math.floor(ct.size[0] / 2), j: Math.floor(ct.size[1] / 2), k: Math.floor(ct.size[2] / 2) }; placed = false;
+      const preset = d.hu_range[0] < -500 ? '-600,1500' : '40,400'; $('ctPreset').value = preset; const [c, w] = preset.split(','); $('ctWc').value = c; $('ctWw').value = w;
+    }
+    $('ctRad').value = $('radius').value;
+    const h = $('ctHint'); h.hidden = !d.hint;
+    if (d.hint) { h.textContent = `Jump to ${d.hint.label}`; h.onclick = () => { const [i, j, k] = ctIdx(d.hint.target_mm); cur = { i, j, k }; placed = true; ct.huText = ''; $('ctRad').value = d.hint.radius_mm; $('radius').value = d.hint.radius_mm; ctRefresh(); }; }
+    $('ctEmpty').hidden = true; $('ctWrap').hidden = false;
+    $('pickInfo').textContent = picked ? $('pickInfo').textContent : 'CT open: click the nodule in the CT tab.';
+    showTab('ctview'); ctRefresh(); $('cvAx').focus();
+  } catch (e) { $('pickInfo').textContent = e.message; }
+  $('openCt').disabled = false;
+}
+$('openCt').addEventListener('click', openCt);
+$('source').addEventListener('change', () => { picked = null; activePhantomNodule = null; $('pickInfo').textContent = 'No point chosen yet.'; ct = null; $('ctWrap').hidden = true; $('ctEmpty').hidden = false; });
+
+/* ------------------------------------------------------------ start */
+(async () => {
+  try { await loadCases(); } catch (e) { setStatus('Cannot reach the server: ' + e.message, true); }
+  await refreshJobs();
+  setInterval(refreshJobs, 4000);
+  const list = await api('/api/jobs').catch(() => []);
+  const first = list.find((j) => j.status === 'done');
+  if (first) selectJob(first.id);
+})();
+</script>
+</body>
+</html>

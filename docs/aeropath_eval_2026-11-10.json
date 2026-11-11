@@ -1,0 +1,1367 @@
+[
+ {
+  "case": 1,
+  "size_xyz": [
+   512,
+   512,
+   767
+  ],
+  "spacing_mm": [
+   0.684,
+   0.684,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 105.79,
+  "t_load_s": 1.8,
+  "t_seg_s": 4.2,
+  "seed_zyx": [
+   455,
+   181,
+   246
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -925,
+  "leak_detected": true,
+  "pred_ml": 71.79,
+  "volumes_ml": {
+   "-950": 59.9,
+   "-925": 69.8,
+   "-900": 638.6
+  },
+  "notes": [
+   "Leak at -900 HU: 69.8 mL -> 638.6 mL; using -925 HU result."
+  ],
+  "dice": 0.8069,
+  "recall_vox": 0.6772,
+  "precision_vox": 0.998,
+  "tree_length_detected": 0.5482,
+  "false_positive_ml": 0.06,
+  "tree": {
+   "junctions": 76,
+   "endpoints": 78,
+   "length_mm": 2014.3,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.2
+ },
+ {
+  "case": 2,
+  "size_xyz": [
+   512,
+   512,
+   829
+  ],
+  "spacing_mm": [
+   0.742,
+   0.742,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 77.27,
+  "t_load_s": 2.1,
+  "t_seg_s": 7.6,
+  "seed_zyx": [
+   478,
+   228,
+   257
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -850,
+  "leak_detected": true,
+  "pred_ml": 64.56,
+  "volumes_ml": {
+   "-950": 57.4,
+   "-925": 59.8,
+   "-900": 61.5,
+   "-875": 63.0,
+   "-850": 64.5,
+   "-825": 4093.6
+  },
+  "notes": [
+   "Leak at -825 HU: 64.5 mL -> 4093.6 mL; using -850 HU result."
+  ],
+  "dice": 0.9069,
+  "recall_vox": 0.8323,
+  "precision_vox": 0.9961,
+  "tree_length_detected": 0.6599,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 41,
+   "endpoints": 43,
+   "length_mm": 1403.5,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.3
+ },
+ {
+  "case": 3,
+  "size_xyz": [
+   512,
+   512,
+   714
+  ],
+  "spacing_mm": [
+   0.688,
+   0.688,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 39.76,
+  "t_load_s": 1.7,
+  "t_seg_s": 4.3,
+  "seed_zyx": [
+   383,
+   214,
+   218
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -900,
+  "leak_detected": true,
+  "pred_ml": 35.92,
+  "volumes_ml": {
+   "-950": 27.8,
+   "-925": 33.5,
+   "-900": 35.8,
+   "-875": 546.7
+  },
+  "notes": [
+   "Leak at -875 HU: 35.8 mL -> 546.7 mL; using -900 HU result."
+  ],
+  "dice": 0.9062,
+  "recall_vox": 0.8624,
+  "precision_vox": 0.9546,
+  "tree_length_detected": 0.5266,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 39,
+   "endpoints": 41,
+   "length_mm": 1317.1,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.0
+ },
+ {
+  "case": 4,
+  "size_xyz": [
+   487,
+   487,
+   598
+  ],
+  "spacing_mm": [
+   0.676,
+   0.676,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 47.06,
+  "t_load_s": 1.3,
+  "t_seg_s": 3.1,
+  "seed_zyx": [
+   337,
+   249,
+   210
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -900,
+  "leak_detected": true,
+  "pred_ml": 39.15,
+  "volumes_ml": {
+   "-950": 25.4,
+   "-925": 34.8,
+   "-900": 39.0,
+   "-875": 109.3
+  },
+  "notes": [
+   "Leak at -875 HU: 39.0 mL -> 109.3 mL; using -900 HU result."
+  ],
+  "dice": 0.8915,
+  "recall_vox": 0.8165,
+  "precision_vox": 0.9815,
+  "tree_length_detected": 0.5802,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 49,
+   "endpoints": 51,
+   "length_mm": 1724.6,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.4
+ },
+ {
+  "case": 5,
+  "size_xyz": [
+   512,
+   512,
+   619
+  ],
+  "spacing_mm": [
+   0.648,
+   0.648,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3070.907470703125
+  ],
+  "truth_ml": 33.81,
+  "t_load_s": 1.4,
+  "t_seg_s": 4.2,
+  "seed_zyx": [
+   371,
+   199,
+   213
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -850,
+  "leak_detected": true,
+  "pred_ml": 23.93,
+  "volumes_ml": {
+   "-950": 18.2,
+   "-925": 20.8,
+   "-900": 22.1,
+   "-875": 23.0,
+   "-850": 23.9,
+   "-825": 2101.7
+  },
+  "notes": [
+   "Leak at -825 HU: 23.9 mL -> 2101.7 mL; using -850 HU result."
+  ],
+  "dice": 0.8263,
+  "recall_vox": 0.7055,
+  "precision_vox": 0.9968,
+  "tree_length_detected": 0.7422,
+  "false_positive_ml": 0.03,
+  "tree": {
+   "junctions": 20,
+   "endpoints": 22,
+   "length_mm": 675.7,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 0.6
+ },
+ {
+  "case": 6,
+  "size_xyz": [
+   487,
+   441,
+   575
+  ],
+  "spacing_mm": [
+   0.664,
+   0.664,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 28.81,
+  "t_load_s": 1.1,
+  "t_seg_s": 3.3,
+  "seed_zyx": [
+   352,
+   167,
+   220
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -850,
+  "leak_detected": true,
+  "pred_ml": 20.51,
+  "volumes_ml": {
+   "-950": 17.2,
+   "-925": 18.5,
+   "-900": 19.2,
+   "-875": 19.9,
+   "-850": 20.5,
+   "-825": 504.2
+  },
+  "notes": [
+   "Leak at -825 HU: 20.5 mL -> 504.2 mL; using -850 HU result."
+  ],
+  "dice": 0.8308,
+  "recall_vox": 0.7112,
+  "precision_vox": 0.9988,
+  "tree_length_detected": 0.4237,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 11,
+   "endpoints": 13,
+   "length_mm": 483.8,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 0.5
+ },
+ {
+  "case": 7,
+  "size_xyz": [
+   512,
+   512,
+   723
+  ],
+  "spacing_mm": [
+   0.756,
+   0.756,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3072.0
+  ],
+  "truth_ml": 42.66,
+  "t_load_s": 1.8,
+  "t_seg_s": 5.6,
+  "seed_zyx": [
+   438,
+   268,
+   263
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -900,
+  "leak_detected": true,
+  "pred_ml": 38.39,
+  "volumes_ml": {
+   "-950": 33.6,
+   "-925": 36.1,
+   "-900": 38.3,
+   "-875": 906.4
+  },
+  "notes": [
+   "Leak at -875 HU: 38.3 mL -> 906.4 mL; using -900 HU result."
+  ],
+  "dice": 0.9017,
+  "recall_vox": 0.8566,
+  "precision_vox": 0.9518,
+  "tree_length_detected": 0.5689,
+  "false_positive_ml": 0.03,
+  "tree": {
+   "junctions": 53,
+   "endpoints": 55,
+   "length_mm": 1700.1,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.3
+ },
+ {
+  "case": 8,
+  "size_xyz": [
+   512,
+   512,
+   533
+  ],
+  "spacing_mm": [
+   0.734,
+   0.734,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 23.85,
+  "t_load_s": 1.3,
+  "t_seg_s": 3.7,
+  "seed_zyx": [
+   315,
+   259,
+   268
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -900,
+  "leak_detected": true,
+  "pred_ml": 20.7,
+  "volumes_ml": {
+   "-950": 16.7,
+   "-925": 19.3,
+   "-900": 20.7,
+   "-875": 88.5
+  },
+  "notes": [
+   "Leak at -875 HU: 20.7 mL -> 88.5 mL; using -900 HU result."
+  ],
+  "dice": 0.8878,
+  "recall_vox": 0.8292,
+  "precision_vox": 0.9553,
+  "tree_length_detected": 0.3869,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 14,
+   "endpoints": 16,
+   "length_mm": 694.4,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 0.7
+ },
+ {
+  "case": 9,
+  "size_xyz": [
+   512,
+   512,
+   727
+  ],
+  "spacing_mm": [
+   0.752,
+   0.752,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 68.21,
+  "t_load_s": 1.8,
+  "error": "segmentation: ValueError: Region growing already exceeds 400 mL (1246 mL) at the lowest threshold (-950 HU): the airway leaks into the lung. Needs a different seed or a learned model.",
+  "seed_failed": true
+ },
+ {
+  "case": 10,
+  "size_xyz": [
+   512,
+   512,
+   241
+  ],
+  "spacing_mm": [
+   0.703,
+   0.703,
+   1.25
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -3024.0,
+   3071.0
+  ],
+  "truth_ml": 86.01,
+  "t_load_s": 0.7,
+  "t_seg_s": 3.8,
+  "seed_zyx": [
+   336,
+   162,
+   235
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -900,
+  "leak_detected": true,
+  "pred_ml": 49.85,
+  "volumes_ml": {
+   "-950": 1.3,
+   "-925": 35.2,
+   "-900": 48.2,
+   "-875": 1073.3
+  },
+  "notes": [
+   "Leak at -875 HU: 48.2 mL -> 1073.3 mL; using -900 HU result."
+  ],
+  "dice": 0.7335,
+  "recall_vox": 0.5793,
+  "precision_vox": 0.9995,
+  "tree_length_detected": 0.4371,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 24,
+   "endpoints": 26,
+   "length_mm": 1211.5,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.6
+ },
+ {
+  "case": 11,
+  "size_xyz": [
+   512,
+   512,
+   553
+  ],
+  "spacing_mm": [
+   0.68,
+   0.68,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 39.35,
+  "t_load_s": 1.3,
+  "t_seg_s": 4.7,
+  "seed_zyx": [
+   335,
+   131,
+   222
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -800,
+  "leak_detected": false,
+  "pred_ml": 30.62,
+  "volumes_ml": {
+   "-950": 22.4,
+   "-925": 24.8,
+   "-900": 26.5,
+   "-875": 27.7,
+   "-850": 28.8,
+   "-825": 29.7,
+   "-800": 30.6
+  },
+  "notes": [
+   "No leak detected up to the highest threshold; airway may still be incomplete."
+  ],
+  "dice": 0.8712,
+  "recall_vox": 0.7746,
+  "precision_vox": 0.9953,
+  "tree_length_detected": 0.6919,
+  "false_positive_ml": 0.02,
+  "tree": {
+   "junctions": 27,
+   "endpoints": 29,
+   "length_mm": 1011.1,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.5
+ },
+ {
+  "case": 12,
+  "size_xyz": [
+   512,
+   512,
+   602
+  ],
+  "spacing_mm": [
+   0.674,
+   0.674,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 62.96,
+  "t_load_s": 1.4,
+  "t_seg_s": 4.2,
+  "seed_zyx": [
+   357,
+   185,
+   246
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -875,
+  "leak_detected": true,
+  "pred_ml": 47.35,
+  "volumes_ml": {
+   "-950": 39.0,
+   "-925": 43.4,
+   "-900": 45.6,
+   "-875": 47.1,
+   "-850": 1553.3
+  },
+  "notes": [
+   "Leak at -850 HU: 47.1 mL -> 1553.3 mL; using -875 HU result."
+  ],
+  "dice": 0.8584,
+  "recall_vox": 0.752,
+  "precision_vox": 0.9999,
+  "tree_length_detected": 0.4319,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 23,
+   "endpoints": 25,
+   "length_mm": 849.6,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.0
+ },
+ {
+  "case": 13,
+  "size_xyz": [
+   512,
+   512,
+   620
+  ],
+  "spacing_mm": [
+   0.676,
+   0.676,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 36.66,
+  "t_load_s": 1.4,
+  "t_seg_s": 3.7,
+  "seed_zyx": [
+   312,
+   183,
+   246
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -900,
+  "leak_detected": true,
+  "pred_ml": 32.83,
+  "volumes_ml": {
+   "-950": 26.5,
+   "-925": 30.4,
+   "-900": 32.8,
+   "-875": 938.0
+  },
+  "notes": [
+   "Leak at -875 HU: 32.8 mL -> 938.0 mL; using -900 HU result."
+  ],
+  "dice": 0.8987,
+  "recall_vox": 0.8519,
+  "precision_vox": 0.951,
+  "tree_length_detected": 0.5629,
+  "false_positive_ml": 0.31,
+  "tree": {
+   "junctions": 44,
+   "endpoints": 46,
+   "length_mm": 1331.4,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.1
+ },
+ {
+  "case": 14,
+  "size_xyz": [
+   512,
+   512,
+   584
+  ],
+  "spacing_mm": [
+   0.76,
+   0.76,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 54.3,
+  "t_load_s": 1.4,
+  "t_seg_s": 5.9,
+  "seed_zyx": [
+   385,
+   237,
+   256
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -800,
+  "leak_detected": false,
+  "pred_ml": 42.56,
+  "volumes_ml": {
+   "-950": 5.6,
+   "-925": 30.1,
+   "-900": 36.2,
+   "-875": 39.0,
+   "-850": 40.5,
+   "-825": 41.6,
+   "-800": 42.7
+  },
+  "notes": [
+   "No leak detected up to the highest threshold; airway may still be incomplete."
+  ],
+  "dice": 0.8787,
+  "recall_vox": 0.7838,
+  "precision_vox": 0.9999,
+  "tree_length_detected": 0.6167,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 18,
+   "endpoints": 20,
+   "length_mm": 695.8,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 0.7
+ },
+ {
+  "case": 15,
+  "size_xyz": [
+   512,
+   512,
+   556
+  ],
+  "spacing_mm": [
+   0.824,
+   0.824,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 41.23,
+  "t_load_s": 1.4,
+  "t_seg_s": 5.7,
+  "seed_zyx": [
+   364,
+   360,
+   266
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -800,
+  "leak_detected": false,
+  "pred_ml": 27.92,
+  "volumes_ml": {
+   "-925": 14.6,
+   "-900": 19.8,
+   "-875": 23.2,
+   "-850": 25.4,
+   "-825": 26.9,
+   "-800": 28.0
+  },
+  "notes": [
+   "No leak detected up to the highest threshold; airway may still be incomplete."
+  ],
+  "dice": 0.8069,
+  "recall_vox": 0.6766,
+  "precision_vox": 0.9992,
+  "tree_length_detected": 0.4565,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 15,
+   "endpoints": 17,
+   "length_mm": 725.9,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 0.9
+ },
+ {
+  "case": 16,
+  "size_xyz": [
+   512,
+   512,
+   843
+  ],
+  "spacing_mm": [
+   0.684,
+   0.684,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   2557.217529296875
+  ],
+  "truth_ml": 76.35,
+  "t_load_s": 2.0,
+  "t_seg_s": 4.6,
+  "seed_zyx": [
+   505,
+   204,
+   217
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -925,
+  "leak_detected": true,
+  "pred_ml": 71.83,
+  "volumes_ml": {
+   "-950": 68.7,
+   "-925": 71.7,
+   "-900": 2432.0
+  },
+  "notes": [
+   "Leak at -900 HU: 71.7 mL -> 2432.0 mL; using -925 HU result."
+  ],
+  "dice": 0.9129,
+  "recall_vox": 0.8859,
+  "precision_vox": 0.9416,
+  "tree_length_detected": 0.6196,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 36,
+   "endpoints": 39,
+   "length_mm": 1421.2,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.3
+ },
+ {
+  "case": 17,
+  "size_xyz": [
+   487,
+   407,
+   602
+  ],
+  "spacing_mm": [
+   0.752,
+   0.752,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 63.33,
+  "t_load_s": 1.2,
+  "t_seg_s": 3.5,
+  "seed_zyx": [
+   338,
+   186,
+   249
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -900,
+  "leak_detected": true,
+  "pred_ml": 53.49,
+  "volumes_ml": {
+   "-950": 48.6,
+   "-925": 51.1,
+   "-900": 53.4,
+   "-875": 1527.6
+  },
+  "notes": [
+   "Leak at -875 HU: 53.4 mL -> 1527.6 mL; using -900 HU result."
+  ],
+  "dice": 0.8871,
+  "recall_vox": 0.8182,
+  "precision_vox": 0.9687,
+  "tree_length_detected": 0.5799,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 44,
+   "endpoints": 46,
+   "length_mm": 1617.5,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.8
+ },
+ {
+  "case": 18,
+  "size_xyz": [
+   512,
+   512,
+   706
+  ],
+  "spacing_mm": [
+   0.752,
+   0.752,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 44.37,
+  "t_load_s": 1.8,
+  "t_seg_s": 5.2,
+  "seed_zyx": [
+   380,
+   216,
+   253
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -900,
+  "leak_detected": true,
+  "pred_ml": 46.8,
+  "volumes_ml": {
+   "-950": 39.2,
+   "-925": 44.4,
+   "-900": 46.8,
+   "-875": 1096.1
+  },
+  "notes": [
+   "Leak at -875 HU: 46.8 mL -> 1096.1 mL; using -900 HU result."
+  ],
+  "dice": 0.7957,
+  "recall_vox": 0.8175,
+  "precision_vox": 0.7751,
+  "tree_length_detected": 0.3744,
+  "false_positive_ml": 7.8,
+  "tree": {
+   "junctions": 32,
+   "endpoints": 35,
+   "length_mm": 1170.6,
+   "root_z_is_top": false
+  },
+  "t_tree_s": 1.5
+ },
+ {
+  "case": 19,
+  "size_xyz": [
+   512,
+   512,
+   666
+  ],
+  "spacing_mm": [
+   0.738,
+   0.738,
+   0.499
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 74.54,
+  "t_load_s": 1.7,
+  "t_seg_s": 5.7,
+  "seed_zyx": [
+   401,
+   226,
+   247
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -850,
+  "leak_detected": true,
+  "pred_ml": 66.89,
+  "volumes_ml": {
+   "-950": 57.9,
+   "-925": 60.9,
+   "-900": 62.8,
+   "-875": 64.6,
+   "-850": 66.8,
+   "-825": 145.3
+  },
+  "notes": [
+   "Leak at -825 HU: 66.8 mL -> 145.3 mL; using -850 HU result."
+  ],
+  "dice": 0.8586,
+  "recall_vox": 0.8146,
+  "precision_vox": 0.9077,
+  "tree_length_detected": 0.369,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 50,
+   "endpoints": 52,
+   "length_mm": 1765.0,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.5
+ },
+ {
+  "case": 20,
+  "size_xyz": [
+   512,
+   512,
+   286
+  ],
+  "spacing_mm": [
+   0.635,
+   0.635,
+   0.999
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 45.36,
+  "t_load_s": 0.8,
+  "t_seg_s": 3.2,
+  "seed_zyx": [
+   281,
+   235,
+   207
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -875,
+  "leak_detected": true,
+  "pred_ml": 42.4,
+  "volumes_ml": {
+   "-950": 34.4,
+   "-925": 38.8,
+   "-900": 41.0,
+   "-875": 42.6,
+   "-850": 260.4
+  },
+  "notes": [
+   "Leak at -850 HU: 42.6 mL -> 260.4 mL; using -875 HU result."
+  ],
+  "dice": 0.9354,
+  "recall_vox": 0.9049,
+  "precision_vox": 0.968,
+  "tree_length_detected": 0.5519,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 19,
+   "endpoints": 21,
+   "length_mm": 796.2,
+   "root_z_is_top": false
+  },
+  "t_tree_s": 0.7
+ },
+ {
+  "case": 21,
+  "size_xyz": [
+   512,
+   512,
+   717
+  ],
+  "spacing_mm": [
+   0.764,
+   0.764,
+   0.5
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 68.44,
+  "t_load_s": 1.8,
+  "t_seg_s": 5.2,
+  "seed_zyx": [
+   409,
+   223,
+   252
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -925,
+  "leak_detected": true,
+  "pred_ml": 49.43,
+  "volumes_ml": {
+   "-950": 44.4,
+   "-925": 49.0,
+   "-900": 1608.1
+  },
+  "notes": [
+   "Leak at -900 HU: 49.0 mL -> 1608.1 mL; using -925 HU result."
+  ],
+  "dice": 0.8385,
+  "recall_vox": 0.7221,
+  "precision_vox": 0.9998,
+  "tree_length_detected": 0.7494,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 25,
+   "endpoints": 27,
+   "length_mm": 945.8,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.4
+ },
+ {
+  "case": 22,
+  "size_xyz": [
+   512,
+   512,
+   329
+  ],
+  "spacing_mm": [
+   0.742,
+   0.742,
+   0.997
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 65.63,
+  "t_load_s": 1.0,
+  "t_seg_s": 3.8,
+  "seed_zyx": [
+   381,
+   209,
+   256
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -950,
+  "leak_detected": true,
+  "pred_ml": 58.41,
+  "volumes_ml": {
+   "-950": 54.8,
+   "-925": 2195.4
+  },
+  "notes": [
+   "Leak at -925 HU: 54.8 mL -> 2195.4 mL; using -950 HU result."
+  ],
+  "dice": 0.9095,
+  "recall_vox": 0.8595,
+  "precision_vox": 0.9657,
+  "tree_length_detected": 0.5854,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 46,
+   "endpoints": 48,
+   "length_mm": 1495.7,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.3
+ },
+ {
+  "case": 23,
+  "size_xyz": [
+   512,
+   512,
+   694
+  ],
+  "spacing_mm": [
+   0.562,
+   0.562,
+   0.499
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 29.75,
+  "t_load_s": 1.5,
+  "t_seg_s": 3.3,
+  "seed_zyx": [
+   415,
+   156,
+   191
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -875,
+  "leak_detected": true,
+  "pred_ml": 31.32,
+  "volumes_ml": {
+   "-950": 27.8,
+   "-925": 29.3,
+   "-900": 30.4,
+   "-875": 31.4,
+   "-850": 1014.2
+  },
+  "notes": [
+   "Leak at -850 HU: 31.4 mL -> 1014.2 mL; using -875 HU result."
+  ],
+  "dice": 0.9,
+  "recall_vox": 0.9237,
+  "precision_vox": 0.8775,
+  "tree_length_detected": 0.6479,
+  "false_positive_ml": 0.01,
+  "tree": {
+   "junctions": 30,
+   "endpoints": 32,
+   "length_mm": 1071.1,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 0.7
+ },
+ {
+  "case": 24,
+  "size_xyz": [
+   512,
+   512,
+   607
+  ],
+  "spacing_mm": [
+   0.691,
+   0.691,
+   0.499
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   1658.997802734375
+  ],
+  "truth_ml": 59.74,
+  "t_load_s": 1.5,
+  "t_seg_s": 5.0,
+  "seed_zyx": [
+   382,
+   137,
+   229
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -825,
+  "leak_detected": true,
+  "pred_ml": 45.0,
+  "volumes_ml": {
+   "-950": 30.1,
+   "-925": 36.9,
+   "-900": 40.2,
+   "-875": 42.1,
+   "-850": 43.6,
+   "-825": 45.0,
+   "-800": 552.0
+  },
+  "notes": [
+   "Leak at -800 HU: 45.0 mL -> 552.0 mL; using -825 HU result."
+  ],
+  "dice": 0.8589,
+  "recall_vox": 0.753,
+  "precision_vox": 0.9996,
+  "tree_length_detected": 0.6099,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 19,
+   "endpoints": 21,
+   "length_mm": 844.1,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 1.0
+ },
+ {
+  "case": 25,
+  "size_xyz": [
+   512,
+   512,
+   328
+  ],
+  "spacing_mm": [
+   0.656,
+   0.656,
+   1.0
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 47.92,
+  "t_load_s": 0.9,
+  "t_seg_s": 3.6,
+  "seed_zyx": [
+   416,
+   209,
+   208
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -900,
+  "leak_detected": true,
+  "pred_ml": 33.98,
+  "volumes_ml": {
+   "-950": 30.2,
+   "-925": 32.5,
+   "-900": 34.0,
+   "-875": 371.5
+  },
+  "notes": [
+   "Leak at -875 HU: 34.0 mL -> 371.5 mL; using -900 HU result."
+  ],
+  "dice": 0.8256,
+  "recall_vox": 0.7056,
+  "precision_vox": 0.995,
+  "tree_length_detected": 0.5762,
+  "false_positive_ml": 0.14,
+  "tree": {
+   "junctions": 22,
+   "endpoints": 24,
+   "length_mm": 902.3,
+   "root_z_is_top": true
+  },
+  "t_tree_s": 0.9
+ },
+ {
+  "case": 26,
+  "size_xyz": [
+   512,
+   512,
+   265
+  ],
+  "spacing_mm": [
+   0.781,
+   0.781,
+   1.245
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1115.0,
+   3071.0
+  ],
+  "truth_ml": 73.91,
+  "t_load_s": 0.9,
+  "t_seg_s": 5.9,
+  "seed_zyx": [
+   336,
+   269,
+   271
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -875,
+  "leak_detected": true,
+  "pred_ml": 47.67,
+  "volumes_ml": {
+   "-950": 8.6,
+   "-925": 29.4,
+   "-900": 40.7,
+   "-875": 47.1,
+   "-850": 756.8
+  },
+  "notes": [
+   "Leak at -850 HU: 47.1 mL -> 756.8 mL; using -875 HU result."
+  ],
+  "dice": 0.7816,
+  "recall_vox": 0.6428,
+  "precision_vox": 0.9967,
+  "tree_length_detected": 0.5108,
+  "false_positive_ml": 0.0,
+  "tree": {
+   "junctions": 56,
+   "endpoints": 58,
+   "length_mm": 1909.1,
+   "root_z_is_top": false
+  },
+  "t_tree_s": 1.8
+ },
+ {
+  "case": 27,
+  "size_xyz": [
+   512,
+   512,
+   723
+  ],
+  "spacing_mm": [
+   0.812,
+   0.812,
+   0.499
+  ],
+  "load_warnings": [],
+  "hu_min_max": [
+   -1024.0,
+   3071.0
+  ],
+  "truth_ml": 71.3,
+  "t_load_s": 1.8,
+  "t_seg_s": 5.3,
+  "seed_zyx": [
+   437,
+   204,
+   278
+  ],
+  "seed_in_truth": true,
+  "threshold_hu": -925,
+  "leak_detected": true,
+  "pred_ml": 60.1,
+  "volumes_ml": {
+   "-950": 42.7,
+   "-925": 57.1,
+   "-900": 944.4
+  },
+  "notes": [
+   "Leak at -900 HU: 57.1 mL -> 944.4 mL; using -925 HU result."
+  ],
+  "dice": 0.866,
+  "recall_vox": 0.798,
+  "precision_vox": 0.9468,
+  "tree_length_detected": 0.5105,
+  "false_positive_ml": 0.01,
+  "tree": {
+   "junctions": 58,
+   "endpoints": 60,
+   "length_mm": 1804.4,
+   "root_z_is_top": false
+  },
+  "t_tree_s": 1.6
+ }
+]
