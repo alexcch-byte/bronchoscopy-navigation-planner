@@ -259,7 +259,7 @@ Second-opinion reviews with the Antigravity CLI (`agy`):
 4. Close or amend Phase 1's "done when" once routing and rendering have run on at least 5 real cases.
 
 **Known limits:**
-- Threshold-ladder growing under-segments distal airways (about 55% of the true centerline on AeroPath) and fails on emphysema (case 9); Phase 2 adds the learned model. The leak-rule constants (2x ratio, 30 mL jump, 10 mL and 100 mL early rule) are hand-set and have been checked on 27 AeroPath cases only.
+- Threshold-ladder growing under-segments distal airways (about 55% of the true centerline on AeroPath; about 70% with the thin-airway extension added on 2026-11-14) and fails on emphysema (case 9); Phase 2 adds the learned model. The leak-rule constants (2x ratio, 30 mL jump, 10 mL and 100 mL early rule) are hand-set and have been checked on 27 AeroPath cases only.
 - Exit selection is "nearest airway point the scope can reach". The full scoring (alignment, vessels, pleura) is Phase 3.
 - Rendering is surface-based with a headlight; staircase rings from the voxel mask may need finer smoothing or a volume renderer on real data.
 - The nodule is a translucent "ghost" sphere on an overlay layer, not depth-correct through the wall.
@@ -311,7 +311,7 @@ Second-opinion reviews with the Antigravity CLI (`agy`):
 
 | Area | State |
 |---|---|
-| Core pipeline (ingest, airway segmentation, tree, routing, rendering) | Built, 49 tests. Real-CT baseline on AeroPath: Dice 0.86, but only about 55% of the true centerline reached. |
+| Core pipeline (ingest, airway segmentation, tree, routing, rendering) | Built, 61 tests (core; GPU and CPU). Real-CT result on AeroPath with the thin-airway extension (default): Dice 0.87, centerline reached 0.705 on average (baseline 0.551), precision 0.915; see `docs/aeropath_eval_2026-11-14_small_airways.md`. NVIDIA CUDA path optional (about 3x faster per run). |
 | Routing and fly-through on real CTs | 8 AeroPath cases run end to end; stills reviewed in depth for 4. |
 | Local console | CT viewer (scroll, click, HU, windowing), imports (volume file, JPG/PNG series, path), interactive fly-through with look-around, edit-path engine (backend + UI). |
 | Public demo (Funnel, passcode) | **Interactive tier live on public data (phantom + the 27 AeroPath CTs)**: sign in, place/edit custom nodule in the phantom CT or pick one on an AeroPath CT, run planning, 3D airway tree with alternatives and path editing, save edited runs. Enforced limits: session isolation, 1 active run per session, no hourly cap (released 2026-11-13), 3 concurrent public runs, 7-min timeout, pruning. Tested (server suite: 42 tests passing on 2026-11-10; core suite: 49). Server hardening from the 2026-11-10 review: the login limit and per-visitor quotas key on the proxy-appended address (not a forgeable first entry), the check-and-start of a public run is atomic, and a malformed cookie is a 401 instead of a 500. |

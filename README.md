@@ -9,7 +9,7 @@ Virtual bronchoscopy planning from chest CT: load a CT, build a 3D airway model,
 | Part | State |
 |---|---|
 | `core/` pipeline (ingest, airway segmentation, centerline tree, routing, VB rendering, CLI) | Built. 44 core tests, 23 console API tests, 8 CT tests (75 total passing). Routing and rendering have run end to end on 8 real AeroPath cases and the phantom. |
-| Real CT validation | Airway segmentation scored on AeroPath (26 of 27 cases): mean Dice 0.86, precision 0.97, but only about 55% of the true centerline reached. See [Evaluating on AeroPath](#evaluating-on-aeropath) and `docs/aeropath_eval_2026-11-10.md`. |
+| Real CT validation | Airway segmentation scored on AeroPath (26 of 27 cases): baseline mean Dice 0.86, precision 0.97, 55% of the true centerline reached; with the thin-airway extension (now the default) Dice 0.87, precision 0.92, 70% of the centerline. See [Evaluating on AeroPath](#evaluating-on-aeropath), `docs/aeropath_eval_2026-11-10.md` (baseline) and `docs/aeropath_eval_2026-11-14_small_airways.md`. |
 | `server/` (FastAPI + test console) | Local test console with CT slice viewer, custom nodule placement in phantom, 3D airway tree with alternatives and path editing, and a live Funnel demo on public data (phantom and AeroPath). |
 | `web/` (React + TypeScript) | Placeholder page. |
 | Docker stack | Written but never run: Docker is not installed on the dev machine. |
