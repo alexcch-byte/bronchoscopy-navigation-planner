@@ -73,6 +73,39 @@ def rebuild_from_job(mask_img: sitk.Image, base_route: dict):
     return grid, mask, tree, origin_grid, target_grid, float(base_route["target"]["radius_mm"])
 
 
+def added_airway_warning(info: dict) -> str:
+    return (
+        f"Includes an airway added by the operator ({info['length_mm']:.0f} mm long, radius {info['radius_mm']:.1f} mm "
+        "as entered). The software did not detect it and its width is not measured from the scan."
+    )
+
+
+def route_with_added_airway(mask_img: sitk.Image, base_route: dict, points_phys, radius_mm: float, min_diameter_mm: float):
+    """Paint an operator-drawn airway into a finished job's mask, rebuild the tree and route to its far end.
+
+    Returns (new mask image, grid, mask array, tree, route, info, target radius). Raises ValueError with a message
+    fit for the operator (bad points, too far from an airway, branch too short or thin to survive tree pruning)."""
+    from .planning.route import nearest_node
+    from .segmentation.manual import add_airway
+
+    grid0 = Grid.from_image(mask_img)
+    new_mask, info = add_airway(sitk.GetArrayFromImage(mask_img).astype(bool), grid0, points_phys, radius_mm)
+    new_img = sitk.GetImageFromArray(new_mask.astype(np.uint8))
+    new_img.CopyInformation(mask_img)
+    grid, mask, tree, origin_grid, target_grid, target_radius = rebuild_from_job(new_img, base_route)
+    end_grid = grid.points_to_grid(np.asarray(points_phys[-1], dtype=float))
+    tip = float(np.linalg.norm(tree.pts_mm[nearest_node(tree, end_grid)] - end_grid))
+    if tip > max(2.5, radius_mm + 1.5):
+        raise ValueError(
+            "The new airway is too short or too thin to keep as a branch. Click further along it "
+            "or increase its radius."
+        )
+    route = plan_route(
+        tree, target_grid, target_radius, origin_mm=origin_grid, min_diameter_mm=min_diameter_mm, force_exit_mm=end_grid
+    )
+    return new_img, grid, mask, tree, route, info, target_radius
+
+
 def render_outputs(
     out: Path,
     mask: np.ndarray,

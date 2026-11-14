@@ -811,3 +811,101 @@ def test_job_and_edit_camera_roll_passed(api, monkeypatch):
     assert "--camera-roll" in captured_cmd
     idx2 = captured_cmd.index("--camera-roll")
     assert captured_cmd[idx2 + 1] == "-90.0"
+
+
+# ---------------------------------------------------------------- adding an airway the segmentation missed
+
+def _phantom_base_job(main, tmp, jid="20261114-100000-addaws"):
+    import json
+    from bronchnav.phantom import make_phantom
+    from bronchnav.pipeline import run_plan
+
+    out = tmp / "jobs" / jid
+    out.mkdir(parents=True)
+    ph = make_phantom()
+    sitk.WriteImage(ph.image, str(out / "phantom.mha"))
+    res = run_plan(out / "phantom.mha", ph.nodule_center_mm, target_radius_mm=ph.nodule_radius_mm, out_dir=out,
+                   spacing_mm=0.75, min_diameter_mm=3.0, video=False)
+    (out / "job_result.json").write_text(json.dumps({
+        "ok": True, "source": "phantom", "name": "Synthetic phantom", "target": {"target_mm": list(ph.nodule_center_mm)},
+        "target_radius_mm": ph.nodule_radius_mm, "metrics": res.route.metrics, "warnings": res.route.warnings,
+        "outputs": res.outputs, "seconds": 2.0}))
+    (out / "owner.txt").write_text("local")
+    main._restore_finished_jobs()
+    assert jid in main._jobs
+    return jid
+
+
+def _stub_branch(client, jid, length_mm=16.0):
+    """Two or three points that start on a tip of the existing tree and run straight on past it (away from the
+    tree's centre), tried tip by tip until one stays inside the volume."""
+    t = client.get(f"/api/jobs/{jid}/tree").json()
+    nodes = np.array(t["nodes"])
+    nbrs = {}
+    for a, b in t["edges"]:
+        nbrs.setdefault(a, []).append(b)
+        nbrs.setdefault(b, []).append(a)
+    centre = nodes.mean(axis=0)
+    for n, nb in sorted(nbrs.items(), key=lambda kv: -np.linalg.norm(nodes[kv[0]] - centre)):
+        if len(nb) != 1:
+            continue
+        d = nodes[n] - nodes[nb[0]]
+        d /= np.linalg.norm(d)
+        pts = [nodes[n] + d * s for s in (0.0, length_mm * 0.4, length_mm)]
+        yield [[float(v) for v in p] for p in pts]
+
+
+def test_add_airway_preview_and_save(api, monkeypatch):
+    import json
+    import subprocess
+
+    client, main, tmp = api
+    jid = _phantom_base_job(main, tmp)
+    seen = None
+    for pts in _stub_branch(client, jid):
+        r = client.post(f"/api/jobs/{jid}/addairway", json={"points_mm": pts, "radius_mm": 1.2})
+        if r.status_code == 200:
+            seen = (pts, r.json())
+            break
+        assert r.status_code == 422, r.text
+    assert seen, "no tip of the phantom tree admitted a 16 mm continuation"
+    pts, data = seen
+    assert data["added_airway"]["length_mm"] >= 15 and data["added_airway"]["added_ml"] > 0
+    assert any("added by the operator" in w for w in data["warnings"])
+    end = np.array(data["path"]["points_mm"][-1])
+    assert np.linalg.norm(end - np.array(pts[-1])) < 4.0   # the route really ends in the new branch
+
+    # bad input is refused with a reason, and nothing is saved
+    far = [[900.0, 900.0, 900.0], [905.0, 900.0, 900.0]]
+    assert client.post(f"/api/jobs/{jid}/addairway", json={"points_mm": far, "radius_mm": 1.0}).status_code == 422
+    assert client.post(f"/api/jobs/{jid}/addairway", json={"points_mm": pts[:1], "radius_mm": 1.0}).status_code == 422
+    assert client.post(f"/api/jobs/{jid}/addairway", json={"points_mm": pts, "radius_mm": 9.0}).status_code == 422
+    assert client.post(f"/api/jobs/{jid}/addairway", json={"points_mm": [[1, 2], [3, 4]], "radius_mm": 1.0}).status_code == 422
+    short = [pts[0], [v + 1.0 for v in pts[0]]]
+    assert client.post(f"/api/jobs/{jid}/addairway", json={"points_mm": short, "radius_mm": 1.0}).status_code == 422
+
+    # saving: the runner gets the drawn airway and the route end is its far end
+    monkeypatch.setattr(main, "_run_job", lambda new_id, cmd: None)
+    saved = client.post(f"/api/jobs/{jid}/edits", json={"end": [0, 0, 0], "video": False,
+                        "add_airway": {"points_mm": pts, "radius_mm": 1.2}})
+    assert saved.status_code == 200, saved.text
+    new_id = saved.json()["id"]
+    params = main._jobs[new_id]["params"]
+    assert params["new_airway"]["radius_mm"] == 1.2 and params["end"] == pts[-1]
+    spec = tmp / "jobs" / new_id / "added_airway.json"
+    assert json.loads(spec.read_text())["points_mm"] == pts
+
+    # and the real job script builds the run from it
+    out = tmp / "jobs" / "20261114-100001-addrun"
+    cmd = [sys.executable, "-u", "-I", str(main.JOB_SCRIPT), "--source", "edit", "--out", str(out),
+           "--base-job-dir", str(tmp / "jobs" / jid), "--end", *map(str, pts[-1]), "--min-diameter", "3.0",
+           "--add-airway-json", str(spec), "--no-video"]
+    done = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    assert done.returncode == 0, done.stdout + done.stderr
+    result = json.loads((out / "job_result.json").read_text())
+    assert result["ok"] and any("added by the operator" in w for w in result["warnings"])
+    route = json.loads((out / "route.json").read_text())
+    assert route["edit"]["added_airway"]["radius_mm"] == 1.2
+    old = sitk.GetArrayFromImage(sitk.ReadImage(str(tmp / "jobs" / jid / "airway_mask.nii.gz"))).sum()
+    new = sitk.GetArrayFromImage(sitk.ReadImage(str(out / "airway_mask.nii.gz"))).sum()
+    assert new > old

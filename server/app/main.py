@@ -35,9 +35,10 @@ from typing import Literal
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from bronchnav import __version__ as core_version
+from bronchnav.segmentation.manual import MAX_POINTS as MAX_AIRWAY_POINTS, RADIUS_RANGE_MM as AIRWAY_RADIUS_RANGE
 from bronchnav.io import IMAGE_EXTS
 
 from . import edit as _edit
@@ -131,7 +132,7 @@ AEROPATH_OPENS_PER_WINDOW = 20  # CT-viewer loads of an AeroPath case per client
 _aeropath_opens: dict[str, list[float]] = {}
 SID_RE = re.compile(r"^[a-f0-9]{8}$")
 JOB_ID_RE = re.compile(r"^\d{8}-\d{6}-[a-f0-9]{6}$")
-PUBLIC_POST_RE = re.compile(r"^/api/jobs/[^/]+/(replan|edits)$")
+PUBLIC_POST_RE = re.compile(r"^/api/jobs/[^/]+/(replan|addairway|edits)$")
 PUBLIC_FILE_RE = re.compile(r"^(route\.json|airway_mesh\.glb|airway_mesh\.ply|flythrough\.mp4|stills/[A-Za-z0-9_.-]+\.png)$")
 _login_attempts: dict[str, list[float]] = {}
 _closed_logged = False
@@ -849,9 +850,26 @@ class EndPoint(BaseModel):
     end: list[float] = Field(min_length=3, max_length=3)
 
 
+class NewAirway(BaseModel):
+    """An airway the operator drew on the CT: clicked points (physical LPS mm, the first on or beside an airway
+    that was already found) and the radius they state for it."""
+
+    points_mm: list[list[float]] = Field(min_length=2, max_length=MAX_AIRWAY_POINTS)
+    radius_mm: float = Field(1.0, ge=AIRWAY_RADIUS_RANGE[0], le=AIRWAY_RADIUS_RANGE[1])
+
+    @field_validator("points_mm")
+    @classmethod
+    def _points(cls, pts: list[list[float]]) -> list[list[float]]:
+        for p in pts:
+            if len(p) != 3 or not all(math.isfinite(v) for v in p):
+                raise ValueError("every point needs three finite coordinates")
+        return pts
+
+
 class EditRun(EndPoint):
     camera_roll: float = Field(0.0, ge=-360.0, le=360.0)
     video: bool = True
+    add_airway: NewAirway | None = None
 
 
 def _edit_base(request: Request, job_id: str) -> tuple[dict, Path]:
@@ -902,20 +920,48 @@ def job_replan(job_id: str, body: EndPoint, request: Request) -> dict:
         raise HTTPException(422, str(e))
 
 
+_airway_slot = threading.Semaphore(1)  # rebuilding a tree costs seconds of CPU: one preview at a time
+
+
+@app.post("/api/jobs/{job_id}/addairway")
+def job_add_airway(job_id: str, body: NewAirway, request: Request) -> dict:
+    """Preview a route into an airway the operator drew on the CT. Nothing is saved."""
+    job, d = _edit_base(request, job_id)
+    min_d = float((job.get("params") or {}).get("min_diameter", 3.0))
+    if not _airway_slot.acquire(blocking=False):
+        raise HTTPException(429, "Another new-airway preview is running; try again in a moment.")
+    try:
+        return _edit.preview_added_airway(d, min_d, body.points_mm, body.radius_mm)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    finally:
+        _airway_slot.release()
+
+
 @app.post("/api/jobs/{job_id}/edits")
 def create_edit(job_id: str, body: EditRun, request: Request) -> dict:
-    """Save an edited path as its own run (new route, mesh, stills and video)."""
+    """Save an edited path as its own run (new route, mesh, stills and video). With `add_airway`, the run is built
+    on a mask that also holds the airway the operator drew, and the route ends at its far end."""
     job, d = _edit_base(request, job_id)
+    if body.add_airway:
+        body.end = list(body.add_airway.points_mm[-1])
     _finite(body.end)
     if _is_public(request):
         _enforce_public_quota(request)
     min_d = float((job.get("params") or {}).get("min_diameter", 3.0))
     params = {"source": "edit", "base_job": job_id, "base_source": _data_source(job), "end": body.end,
               "min_diameter": min_d, "camera_roll": body.camera_roll, "video": body.video}
+    if body.add_airway:
+        params["new_airway"] = body.add_airway.model_dump()
 
     def cmd_for(new_id: str) -> list[str]:
         cmd = [sys.executable, "-u", "-I", str(JOB_SCRIPT), "--source", "edit", "--out", str(JOBS_DIR / new_id),
                "--base-job-dir", str(d), "--end", *[str(v) for v in body.end], "--min-diameter", str(min_d)]
+        if body.add_airway:
+            spec = JOBS_DIR / new_id / "added_airway.json"
+            spec.parent.mkdir(parents=True, exist_ok=True)
+            spec.write_text(json.dumps(body.add_airway.model_dump()), encoding="utf-8")
+            cmd += ["--add-airway-json", str(spec)]
         if body.camera_roll != 0.0:
             cmd += ["--camera-roll", str(body.camera_roll)]
         return cmd if body.video else cmd + ["--no-video"]

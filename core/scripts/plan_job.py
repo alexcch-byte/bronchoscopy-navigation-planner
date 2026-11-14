@@ -27,7 +27,9 @@ from bronchnav.autotarget import choose_target
 from bronchnav.geometry import Grid
 from bronchnav.io import load_image_stack, load_volume, resample_isotropic
 from bronchnav.phantom import make_phantom
-from bronchnav.pipeline import rebuild_from_job, render_outputs, route_payload, run_plan
+from bronchnav.pipeline import (
+    added_airway_warning, rebuild_from_job, render_outputs, route_payload, route_with_added_airway, run_plan,
+)
 from bronchnav.planning import plan_route
 from bronchnav.segmentation import rough_lung_mask, segment_airway
 
@@ -51,18 +53,36 @@ def run_edit(args, out: Path) -> dict:
     base_result = json.loads((base / "job_result.json").read_text(encoding="utf-8"))
     log("rebuilding the airway tree from the saved mask")
     img = sitk.ReadImage(str(base / "airway_mask.nii.gz"))
-    grid, mask, tree, origin_grid, target_grid, radius = rebuild_from_job(img, route0)
-    route = plan_route(
-        tree, target_grid, radius, origin_mm=origin_grid, min_diameter_mm=args.min_diameter,
-        force_exit_mm=grid.points_to_grid(np.array(args.end, dtype=float)),
-    )
+    added = None
+    extra: list[str] = []
+    if getattr(args, "add_airway_json", None):
+        spec = json.loads(Path(args.add_airway_json).read_text(encoding="utf-8"))
+        log("adding the operator's airway to the mask")
+        img, grid, mask, tree, route, added, radius = route_with_added_airway(
+            img, route0, spec["points_mm"], float(spec["radius_mm"]), args.min_diameter
+        )
+        extra.append(added_airway_warning(added))
+        log(f"  added {added['length_mm']:.0f} mm of airway ({added['added_ml']:.2f} mL)")
+        sitk.WriteImage(img, str(out / "airway_mask.nii.gz"))
+    else:
+        grid, mask, tree, origin_grid, target_grid, radius = rebuild_from_job(img, route0)
+        route = plan_route(
+            tree, target_grid, radius, origin_mm=origin_grid, min_diameter_mm=args.min_diameter,
+            force_exit_mm=grid.points_to_grid(np.array(args.end, dtype=float)),
+        )
+        shutil.copy(base / "airway_mask.nii.gz", out / "airway_mask.nii.gz")
     for w in route.warnings:
         log(f"  warning: {w}")
     log(f"  route {route.metrics['length_mm']:.0f} mm, gap to nodule {route.gap_mm:.1f} mm")
-    shutil.copy(base / "airway_mask.nii.gz", out / "airway_mask.nii.gz")
     d = dict(route0)
-    d.update(route_payload(route, grid, tree))
+    d.update(route_payload(route, grid, tree, extra))
     d["edit"] = {"base_job": base.name, "end_mm": [round(float(v), 1) for v in args.end]}
+    if added:
+        d["edit"]["added_airway"] = {**added, "points_mm": spec["points_mm"]}
+        d["tree"] = {
+            "n_nodes": int(len(tree.pts_mm)), "total_length_mm": round(tree.total_length_mm(), 1),
+            "n_junctions": int(len(tree.junctions)), "n_endpoints": int(len(tree.endpoints)),
+        }
     (out / "route.json").write_text(json.dumps(d, indent=1), encoding="utf-8")
     outputs = {"airway_mask": "airway_mask.nii.gz", "route": "route.json"}
     outputs.update(render_outputs(out, mask, grid.spacing_mm, route, grid, camera_roll_deg=getattr(args, "camera_roll", 0.0), video=not args.no_video, log=log))
@@ -73,10 +93,10 @@ def run_edit(args, out: Path) -> dict:
         "target": base_result.get("target"),
         "target_radius_mm": radius,
         "metrics": {k: (round(v, 3) if isinstance(v, float) else v) for k, v in route.metrics.items()},
-        "warnings": route.warnings,
+        "warnings": extra + route.warnings,
         "outputs": outputs,
         "segmentation": base_result.get("segmentation"),
-        "tree": base_result.get("tree"),
+        "tree": d["tree"] if added else base_result.get("tree"),
         "edit": d["edit"],
     }
 
@@ -86,6 +106,7 @@ def main() -> int:
     ap.add_argument("--source", choices=("phantom", "aeropath", "upload", "edit"), required=True)
     ap.add_argument("--base-job-dir", help="edit: the finished job whose route is being changed")
     ap.add_argument("--end", type=float, nargs=3, metavar=("X", "Y", "Z"), help="edit: new end point, physical LPS mm")
+    ap.add_argument("--add-airway-json", help="edit: JSON {points_mm, radius_mm} of an airway the operator drew")
     ap.add_argument("--case", type=int, default=1)
     ap.add_argument("--nodule", type=float, nargs=3, metavar=("X", "Y", "Z"), help="phantom: custom nodule center LPS mm")
     ap.add_argument("--nodule-radius", type=float, default=5.0, help="phantom: custom nodule radius mm")

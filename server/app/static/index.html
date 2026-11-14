@@ -16,6 +16,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; overflow-wrap: anywhere; }
   header { padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 4px 12px; align-items: baseline; flex-wrap: wrap; }
@@ -286,6 +287,14 @@
         <button id="ctEditReset" type="button" style="padding:3px 10px" disabled>Reset to automatic</button>
         <button id="ctEditSave" type="button" class="primary" style="width:auto;padding:4px 12px;margin:0" disabled>Save as a new run</button>
         <span class="legend" id="ctEditInfo"></span>
+      </div>
+      <div class="viewbar" id="ctAddBar" hidden>
+        <label><input type="checkbox" id="ctAddMode"> <strong>Add a missed airway</strong>: click along a thin airway the scan shows but the software missed, starting on an airway that was found</label>
+        <label>Radius (mm) <input type="number" id="ctAddRad" value="1" min="0.4" max="4" step="0.1" style="width:72px"></label>
+        <button id="ctAddUndo" type="button" style="padding:3px 10px" disabled>Undo point</button>
+        <button id="ctAddClear" type="button" style="padding:3px 10px" disabled>Clear</button>
+        <button id="ctAddPreview" type="button" style="padding:3px 10px" disabled>Preview route</button>
+        <span class="legend" id="ctAddInfo"></span>
       </div>
       <div class="ctgrid">
         <div class="ctpane" id="paneAx"><canvas id="cvAx" tabindex="0"></canvas><div class="ctlabel">Axial</div></div>
@@ -752,7 +761,8 @@ async function previewBranch(jobId, pt) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ end: pt }),
     });
-    selectedEditEnd = pt;
+    selectedEditEnd = pt; selectedAddAirway = null;
+    if (ctAddPts.length) { ctAddPts = []; ctAddSync(); }   // an existing airway was chosen instead of the drawn one
     viewer.preview(replan);
     setCtPreview(replan);
     const m = replan.metrics || {};
@@ -812,7 +822,7 @@ async function loadJobEdit(id, route) {
 $('btnResetRoute').addEventListener('click', () => {
   viewer.clearPreview();
   setCtPreview(null);
-  selectedEditEnd = null;
+  selectedEditEnd = null; selectedAddAirway = null; ctAddPts = []; ctAddSync();
   $('editPreviewMetrics').style.display = 'none';
   $('btnResetRoute').style.display = 'none';
   $('btnSaveEditedRoute').disabled = true;
@@ -824,6 +834,7 @@ $('btnSaveEditedRoute').addEventListener('click', async () => {
   try {
     $('btnSaveEditedRoute').disabled = true;
     const body = { end: selectedEditEnd, video: $('video').checked, camera_roll: Number($('camRoll').value) || 0 };
+    if (selectedAddAirway) body.add_airway = selectedAddAirway;
     const job = await api(`/api/jobs/${currentId}/edits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1209,6 +1220,9 @@ function ctGeom(p) {
 /* ---- the planned route drawn on the CT (physical LPS mm -> voxel index -> pane pixels) */
 let ctRouteData = null;      // {id, job, pts, bif, target, radius, stepMm, ctId}: the selected run's route
 let ctPreviewPts = null;     // an edited path being previewed (orange)
+let ctAddPts = [];           // physical LPS mm points clicked along a missed airway (magenta)
+let selectedAddAirway = null;  // {points_mm, radius_mm} once previewed: what "Save as a new run" sends
+const MAX_ADD_POINTS = 60;     // same limit as the server
 let ctPlayTimer = null;
 const ctIdxF = (pt) => {     // fractional voxel index of a physical point (ctIdx without the rounding)
   const d = [pt[0] - ct.origin[0], pt[1] - ct.origin[1], pt[2] - ct.origin[2]];
@@ -1254,8 +1268,52 @@ function ctEditSync(text) {  // buttons and note follow whether an edited path i
 }
 $('ctEditMode').addEventListener('change', () => {
   if ($('ctEditMode').checked) { if (!ctRouteMatches()) { $('ctEditInfo').textContent = 'Load this run\'s CT first.'; $('ctEditMode').checked = false; return; } ctLoadTree(); }
-  $('cvAx').style.cursor = $('cvCo').style.cursor = $('cvSa').style.cursor = $('ctEditMode').checked ? 'copy' : '';
+  else { $('ctAddMode').checked = false; ctAddClear(); }
+  $('ctAddBar').hidden = !$('ctEditMode').checked;
+  ctCursor();
   ctRedrawAll();
+});
+const ctCursor = () => { $('cvAx').style.cursor = $('cvCo').style.cursor = $('cvSa').style.cursor = $('ctAddMode').checked ? 'crosshair' : $('ctEditMode').checked ? 'copy' : ''; };
+
+/* ---- adding an airway the segmentation missed: click along it, preview the route into it, save as a new run */
+const ctAddActive = () => !!($('ctAddMode').checked && ctEditActive());
+function ctAddSync(text) {
+  $('ctAddUndo').disabled = $('ctAddClear').disabled = !ctAddPts.length;
+  $('ctAddPreview').disabled = ctAddPts.length < 2;
+  $('ctAddInfo').textContent = text !== undefined ? text
+    : !ctAddPts.length ? 'Click the first point on an airway that was found, then follow the missed airway outward.'
+    : ctAddPts.length < 2 ? '1 point. Click further along the missed airway.'
+    : `${ctAddPts.length} points. Press "Preview route" when the line follows the airway to its end.`;
+}
+function ctAddInvalidate() {  // the drawn line changed, so an earlier preview no longer matches it
+  if (!selectedAddAirway) return;
+  selectedAddAirway = null; selectedEditEnd = null; viewer.clearPreview(); setCtPreview(null);
+  $('editPreviewMetrics').style.display = 'none'; $('btnResetRoute').style.display = 'none'; $('btnSaveEditedRoute').disabled = true;
+  ctEditSync('');
+}
+function ctAddClear() { ctAddPts = []; ctAddInvalidate(); ctAddSync(); ctRedrawAll(); }
+$('ctAddMode').addEventListener('change', () => { if (!$('ctAddMode').checked) ctAddClear(); else ctAddSync(); ctCursor(); });
+$('ctAddUndo').addEventListener('click', () => { ctAddPts.pop(); ctAddInvalidate(); ctAddSync(); ctRedrawAll(); });
+$('ctAddClear').addEventListener('click', ctAddClear);
+$('ctAddRad').addEventListener('input', ctAddInvalidate);
+$('ctAddPreview').addEventListener('click', async () => {
+  if (!ctRouteData || ctAddPts.length < 2) return;
+  const body = { points_mm: ctAddPts.slice(), radius_mm: Number($('ctAddRad').value) || 1 };
+  $('ctAddPreview').disabled = true; ctAddSync('Building the new airway and the route into it...');
+  try {
+    const replan = await api(`/api/jobs/${ctRouteData.id}/addairway`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    selectedAddAirway = body; selectedEditEnd = body.points_mm[body.points_mm.length - 1];
+    viewer.preview(replan); setCtPreview(replan);
+    const m = replan.metrics || {}, a = replan.added_airway || {};
+    $('previewMetricsText').textContent = `New airway ${fmt(a.length_mm, 0)} mm | Length: ${fmt(m.length_mm, 0)} mm | Gap to nodule surface: ${fmt(m.gap_to_nodule_surface_mm, 1)} mm | Min lumen: ${fmt(m.min_diameter_mm, 1)} mm`;
+    $('editPreviewMetrics').style.display = 'block'; $('btnResetRoute').style.display = 'inline-block'; $('btnSaveEditedRoute').disabled = false;
+    const warn = (replan.warnings || []).filter((w) => !/added by the operator|chosen by the operator/.test(w)).join(' ');
+    ctEditSync(`Route into the new airway: ${fmt(m.length_mm, 0)} mm, gap to nodule ${fmt(m.gap_to_nodule_surface_mm, 1)} mm, narrowest ${fmt(m.min_diameter_mm, 1)} mm. The airway is yours, not detected from the scan.${warn ? ' ' + warn : ''}`);
+    ctAddSync(`Previewed: ${fmt(a.length_mm, 0)} mm of new airway at radius ${fmt(a.radius_mm, 1)} mm. Save it as a new run, or keep clicking to extend it.`);
+  } catch (e) { ctAddSync('Cannot build this airway: ' + e.message); }
+  $('ctAddPreview').disabled = ctAddPts.length < 2;
 });
 $('ctEditReset').addEventListener('click', () => $('btnResetRoute').click());
 $('ctEditSave').addEventListener('click', () => { ctEditSync('Saving and rendering the edited route...'); $('btnSaveEditedRoute').click(); });
@@ -1280,6 +1338,14 @@ function ctDrawRoute(c, p, g) {
         c.strokeStyle = '#ffd23f'; c.lineWidth = 2; c.beginPath(); c.arc(q.x, q.y, Math.max(2, rr * g.s), 0, Math.PI * 2); c.stroke();
       }
     }
+  }
+  if (ctAddPts.length) {  // the airway being drawn: the clicked points (a ring in this slice) joined by a line
+    ctDrawPath(c, p, g, ctAddPts, '#ff4fd8', 'rgba(255,79,216,0.40)');
+    ctAddPts.forEach((pt, i) => {
+      const q = ctPaneXY(p, ctIdxF(pt), g);
+      if (q.d <= 2.0) { c.strokeStyle = '#ff4fd8'; c.lineWidth = 1.5; c.beginPath(); c.arc(q.x, q.y, 5, 0, Math.PI * 2); c.stroke(); }
+      if (q.d <= 2.0 && i === 0) { c.font = '10px system-ui'; c.fillStyle = '#ff4fd8'; c.textAlign = 'left'; c.textBaseline = 'bottom'; c.fillText('start', q.x + 7, q.y - 4); }
+    });
   }
   if (ctPreviewPts && ctPreviewPts.length) {
     ctDrawPath(c, p, g, ctPreviewPts, '#ff9f1a', 'rgba(255,159,26,0.30)');
@@ -1325,7 +1391,8 @@ function setCtRoute(info) {  // the selected run changed (or none)
   if (has && ct && (ct.routeFor === info.id || (ct.routeFor && ct.routeFor === (info.job.params || {}).base_job))) {
     ctRouteData.ctId = ct.id; ct.routeFor = info.id;
   }
-  ctPreviewPts = null; selectedEditEnd = null; ctEditSync(''); ctTree = null;
+  ctPreviewPts = null; selectedEditEnd = null; selectedAddAirway = null; ctAddPts = []; ctEditSync(''); ctTree = null;
+  $('ctAddMode').checked = false; $('ctAddBar').hidden = !$('ctEditMode').checked; ctAddSync(); ctCursor();
   ctRouteStatus(); ctRedrawAll();
   if (has && ctRouteData.ctId && $('ctEditMode').checked) ctLoadTree();
 }
@@ -1412,6 +1479,13 @@ function ctClick(p, e) {
   else if (p === 'co') { cur.i = Math.floor(x / (sx * g.s)); cur.k = nz - 1 - Math.floor(y / (sz * g.s)); }
   else { cur.j = Math.floor(x / (sy * g.s)); cur.k = nz - 1 - Math.floor(y / (sz * g.s)); }
   ct.huText = '';
+  if (ctAddActive()) {  // drawing a missed airway: this click is the next point along it
+    if (ctAddPts.length >= MAX_ADD_POINTS) { ctAddSync(`At most ${MAX_ADD_POINTS} points; preview or save this airway first.`); return; }
+    ctAddInvalidate();
+    ctAddPts.push(ctPhys(cur.i, cur.j, cur.k).map((v) => Math.round(v * 10) / 10));
+    ctAddSync(); ctRefresh();
+    return;
+  }
   if (ctEditActive()) {  // editing the path: this click is the wanted end of the route, not a nodule
     ctRefresh();
     previewBranch(ctRouteData.id, ctPhys(cur.i, cur.j, cur.k).map((v) => Math.round(v * 10) / 10));

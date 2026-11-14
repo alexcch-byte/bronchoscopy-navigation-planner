@@ -26,7 +26,7 @@ from scipy.sparse import triu
 
 from bronchnav.airway_tree import AirwayTree
 from bronchnav.geometry import Grid
-from bronchnav.pipeline import rebuild_from_job, route_payload
+from bronchnav.pipeline import added_airway_warning, rebuild_from_job, route_payload, route_with_added_airway
 from bronchnav.planning import exit_candidates, plan_route
 
 MAX_BUNDLES = 2
@@ -74,6 +74,21 @@ class Bundle:
             min_diameter_mm=self.min_diameter_mm, force_exit_mm=force,
         )
         return route_payload(route, self.grid, self.tree)
+
+
+def preview_added_airway(job_dir: Path, min_diameter_mm: float, points_mm: list, radius_mm: float) -> dict:
+    """Route to the far end of an airway the operator drew (see bronchnav.segmentation.manual). Rebuilds the tree
+    from an edited copy of the mask, so it takes a few seconds and is not cached."""
+    mask_path, route_path = job_dir / "airway_mask.nii.gz", job_dir / "route.json"
+    if not mask_path.exists() or not route_path.exists():
+        raise ValueError("this run has no airway mask or route to edit")
+    route0 = json.loads(route_path.read_text(encoding="utf-8"))
+    _img, grid, _mask, tree, route, info, _radius = route_with_added_airway(
+        sitk.ReadImage(str(mask_path)), route0, points_mm, radius_mm, min_diameter_mm
+    )
+    payload = route_payload(route, grid, tree, [added_airway_warning(info)])
+    payload["added_airway"] = info
+    return payload
 
 
 def load_bundle(job_id: str, job_dir: Path, min_diameter_mm: float = 3.0) -> Bundle:
