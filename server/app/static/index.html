@@ -16,15 +16,23 @@
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; overflow-wrap: anywhere; }
+  header { padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 4px 12px; align-items: baseline; flex-wrap: wrap; }
   header h1 { font-size: 16px; margin: 0; }
   header .tag { font-size: 12px; color: var(--muted); }
-  .banner { background: var(--warn-bg); border-bottom: 1px solid var(--warn-line); padding: 6px 16px; font-size: 12.5px; }
-  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: calc(100vh - 80px); }
-  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 14px 16px; overflow-y: auto; }
-  main { padding: 14px 18px; min-width: 0; }
-  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } }
+  .banner { background: var(--warn-bg); border-bottom: 1px solid var(--warn-line); padding: 6px max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left)); font-size: 12.5px; }
+  /* Desktop: the controls stay in view on the left while the results scroll on the right. */
+  .layout { display: grid; grid-template-columns: minmax(300px, 340px) minmax(0, 1fr); gap: 0; align-items: start; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 14px 16px; overflow-y: auto; position: sticky; top: 0; height: 100vh; height: 100dvh; overscroll-behavior: contain; }
+  main { padding: 14px 18px 24px; min-width: 0; }
+  @media (min-width: 1500px) { .layout { grid-template-columns: 380px minmax(0, 1fr); } main { padding: 16px 28px 28px; } }
+  /* Tablet and phone: one column, controls first, results below. */
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { position: static; height: auto; overflow: visible; border-right: 0; border-bottom: 1px solid var(--line); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+    main { padding: 10px max(12px, env(safe-area-inset-right)) 20px max(12px, env(safe-area-inset-left)); scroll-margin-top: 0; }
+  }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
   h2:first-child { margin-top: 0; }
   label { display: block; margin: 8px 0 2px; font-size: 13px; }
@@ -42,8 +50,9 @@
   .jobs li.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
   .badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; }
   .badge.done { color: var(--good); border-color: var(--good); } .badge.error { color: var(--bad); border-color: var(--bad); }
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; flex-wrap: wrap; }
-  .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 12px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 0 12px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; position: sticky; top: 0; z-index: 5; background: var(--bg); }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 12px; white-space: nowrap; flex: 0 0 auto; }
   .tabs button.active { border-bottom-color: var(--accent); font-weight: 600; }
   .tab { display: none; } .tab.active { display: block; }
   table { border-collapse: collapse; width: 100%; max-width: 640px; }
@@ -53,7 +62,7 @@
   .warns li { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 6px; padding: 7px 10px; margin-bottom: 6px; }
   .empty { color: var(--muted); padding: 30px 0; }
   .err { color: var(--bad); white-space: pre-wrap; }
-  #view { width: 100%; height: min(68vh, 640px); background: #0d1117; border-radius: 8px; position: relative; overflow: hidden; }
+  #view { width: 100%; height: min(68vh, 640px); height: min(68dvh, 640px); background: #0d1117; border-radius: 8px; position: relative; overflow: hidden; touch-action: none; }
   #view canvas { display: block; }
   .viewbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 10px 0; }
   .viewbar label { display: flex; gap: 6px; align-items: center; margin: 0; }
@@ -70,14 +79,62 @@
   .ctbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 10px; }
   .ctbar label { display: flex; gap: 6px; align-items: center; margin: 0; }
   .ctbar input[type=number] { width: 80px; } .ctbar select { width: auto; }
-  .ctgrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); grid-template-areas: "ax co" "ax sa"; gap: 10px; align-items: start; }
-  @media (max-width: 860px) { .ctgrid { grid-template-columns: 1fr; grid-template-areas: "ax" "co" "sa"; } }
+  .ctgrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); grid-template-areas: "ax co" "ax sa"; gap: 10px; align-items: start; max-width: 1280px; }
+  /* Tablet: the large axial image on top, coronal and sagittal side by side below it. */
+  @media (max-width: 860px) { .ctgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "ax ax" "co sa"; } }
+  @media (max-width: 520px) { .ctgrid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "ax" "co" "sa"; } }
   .ctpane { position: relative; background: #000; border-radius: 6px; overflow: hidden; }
   .ctpane canvas { display: block; width: 100%; cursor: crosshair; outline: none; }
   .ctpane .ctlabel { position: absolute; top: 4px; left: 6px; font-size: 11px; color: #9fb0c3; pointer-events: none; text-shadow: 0 0 3px #000; }
   #paneAx { grid-area: ax; } #paneCo { grid-area: co; } #paneSa { grid-area: sa; }
   #ctReadout { margin: 10px 0; max-width: 640px; }
   #ctUse { width: auto; padding: 8px 16px; margin-top: 4px; }
+  img, canvas, video { max-width: 100%; }
+  footer { padding: 10px 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+
+  /* Touch screens: bigger targets. */
+  @media (pointer: coarse) {
+    button, select, input[type=number], input[type=text] { min-height: 42px; }
+    .tabs button { min-height: 44px; padding: 8px 14px; }
+    .check input, .viewbar input[type=checkbox], input[type=radio] { width: 20px; height: 20px; }
+    .jobs li { padding: 11px 10px; }
+    input[type=range] { min-height: 32px; }
+    #dropZone { padding: 18px 10px; }
+  }
+
+  /* Phone. Inputs are 16px so iOS does not zoom the page when one is focused. */
+  @media (max-width: 600px) {
+    body { font-size: 15px; }
+    select, input[type=number], input[type=text] { font-size: 16px; }
+    header h1 { font-size: 15px; }
+    .banner { font-size: 12px; }
+    h2 { margin-top: 18px; }
+    .row { flex-wrap: wrap; }
+    .row > * { flex: 1 1 90px; }
+    .viewbar, .ctbar { gap: 8px 12px; }
+    .viewbar > label:has(input[type=range]), .ctbar > label:has(input[type=range]) { flex: 1 1 100%; }
+    .viewbar input[type=range], .ctbar input[type=range] { flex: 1 1 auto; width: auto !important; min-width: 0; }
+    .viewbar > button, .viewbar > label > button { flex: 1 1 auto; }
+    .viewbar > .legend, .ctbar > .legend { flex: 1 1 100%; }
+    .ctbar > strong { flex: 1 1 100%; }
+    .ctbar input[type=number] { width: 72px; }
+    #view { height: 58vh; height: 58dvh; min-height: 280px; }
+    #videoWrapper { min-height: 0 !important; max-width: 100% !important; }
+    #videoBox video { max-height: 70dvh !important; }
+    .stills { grid-template-columns: 1fr; }
+    pre.log { max-height: 70dvh; }
+    table { max-width: none; }
+    th { width: 50%; }
+    #ctUse, #ctPlacePhantom, #ctEditSave { flex: 1 1 100%; width: 100% !important; }
+    #ctReadout { max-width: none; }
+    #editRoutePanel { padding: 10px !important; }
+    footer { padding: 10px max(12px, env(safe-area-inset-left)); }
+  }
+
+  /* Landscape phone: little height, so the 3D view uses most of it. */
+  @media (max-height: 480px) and (orientation: landscape) {
+    #view { height: 78vh; height: 78dvh; min-height: 200px; }
+  }
 </style>
 <script type="importmap">
 { "imports": {
@@ -294,6 +351,7 @@
         </table>
       </div>
     </div>
+  </section>
 
   <section class="tab" id="videotab">
     <div class="viewbar" id="videoRotBar" style="margin-bottom:8px">
@@ -318,7 +376,7 @@
   <section class="tab" id="logtab"><pre class="log" id="logPre">(no run selected)</pre></section>
 </main>
 </div>
-<footer style="padding:10px 18px;border-top:1px solid var(--line);color:var(--muted);font-size:12px">
+<footer>
   Test data: a synthetic phantom and the AeroPath dataset (CC BY 4.0, arXiv:2311.01138). Planning aid only; <strong>not for clinical use</strong>.
 </footer>
 <dialog id="dlg"><img id="dlgImg" alt=""></dialog>
@@ -551,9 +609,13 @@ function renderJobs(list) {
       : p.source === 'aeropath' ? `AeroPath ${p.case}` : p.source === 'upload' ? (p.name || 'Imported CT') : 'Phantom';
     const t = new Date((j.created || 0) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     li.innerHTML = `<span>${name} <span class="legend">${t}</span></span><span class="badge ${j.status}">${j.status}</span>`;
-    li.addEventListener('click', () => selectJob(j.id));
+    li.addEventListener('click', () => { selectJob(j.id); revealResults(); });
     ul.appendChild(li);
   });
+}
+// On a phone or tablet the results sit below the controls, so bring them into view.
+function revealResults() {
+  if (window.matchMedia('(max-width: 860px)').matches) document.querySelector('main').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 async function refreshJobs() { try { renderJobs(await api('/api/jobs')); } catch (e) { /* ignore */ } }
 
@@ -609,7 +671,7 @@ function watch(id) {
       if (j.status === 'done' || j.status === 'error') {
         clearInterval(polling); $('run').disabled = false; await refreshJobs();
         if (j.status === 'error') setStatus(`Failed: ${(j.result && j.result.error) || 'unknown error'}`, true); else setStatus('Done.');
-        selectJob(id);
+        selectJob(id); revealResults();
       }
     } catch (e) { clearInterval(polling); $('run').disabled = false; setStatus(e.message, true); }
   }, 1500);
