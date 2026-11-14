@@ -216,6 +216,20 @@
         <label>Width <input type="number" id="ctWw" value="1500" step="10" min="1"></label>
         <label>Nodule radius (mm) <input type="number" id="ctRad" value="6" step="0.5" min="1" max="40"></label>
       </div>
+      <div class="viewbar" id="ctRouteBar" hidden>
+        <button id="ctLoadRunCt" type="button" style="padding:3px 10px">Load this run's CT</button>
+        <label><input type="checkbox" id="ctShowRoute" checked> Show planned route</label>
+        <label>Follow route <input type="range" id="ctRoutePos" min="0" max="0" value="0" style="width:240px"></label>
+        <button id="ctRoutePlay" type="button" style="padding:3px 10px">Play</button>
+        <span class="legend" id="ctRouteLabel"></span>
+      </div>
+      <div class="legend" id="ctRouteLegend" hidden><i style="background:#2ee66b"></i>route in this slice <i style="background:rgba(46,230,107,.35)"></i>route seen from the side <i style="background:#2b82ff"></i>end of path <i style="background:#ffd23f"></i>target <i style="background:#ffffff"></i>bifurcation <i style="background:#ff9f1a"></i>edited path (preview)</div>
+      <div class="viewbar" id="ctEditBar" hidden>
+        <label><input type="checkbox" id="ctEditMode"> <strong>Edit path</strong>: click the CT to end the route at the nearest airway</label>
+        <button id="ctEditReset" type="button" style="padding:3px 10px" disabled>Reset to automatic</button>
+        <button id="ctEditSave" type="button" class="primary" style="width:auto;padding:4px 12px;margin:0" disabled>Save as a new run</button>
+        <span class="legend" id="ctEditInfo"></span>
+      </div>
       <div class="ctgrid">
         <div class="ctpane" id="paneAx"><canvas id="cvAx" tabindex="0"></canvas><div class="ctlabel">Axial</div></div>
         <div class="ctpane" id="paneCo"><canvas id="cvCo"></canvas><div class="ctlabel">Coronal</div></div>
@@ -369,7 +383,8 @@ async function loadCases() {
   if (cases.aeropath.length) src.add(new Option(`AeroPath real CT (${cases.aeropath.length} cases)`, 'aeropath'));
   src.add(new Option('My own CT (import a file or images)', 'upload'));
   const cs = $('case'); cs.innerHTML = '';
-  cases.aeropath.forEach((c) => cs.add(new Option(`Case ${c}`, c)));
+  const unsupported = cases.aeropath_unsupported || {};
+  cases.aeropath.forEach((c) => cs.add(new Option(unsupported[c] ? `Case ${c} (cannot be segmented: ${unsupported[c]})` : `Case ${c}`, c)));
   if (cases.aeropath.includes(20)) cs.value = 20;
   if (cases.jobs_dir) $('where').textContent = `Outputs: ${cases.jobs_dir}`;
   syncSource(); syncMode(); applyMode();
@@ -380,8 +395,9 @@ function applyMode() {
   const src = $('source');
   src.innerHTML = '';
   src.add(new Option('Synthetic phantom (fast, ~15 s)', 'phantom'));
+  if (cases.aeropath.length) src.add(new Option(`AeroPath real CT (${cases.aeropath.length} cases)`, 'aeropath'));
   src.value = 'phantom';
-  $('caseWrap').hidden = true;
+  syncSource();  // shows the case picker only for AeroPath; imports stay hidden
   $('importWrap').hidden = true;
   $('where').hidden = true;
   document.querySelector('#tabs button[data-tab=logtab]').hidden = true;  // job logs can hold local paths
@@ -393,7 +409,7 @@ function applyMode() {
     note.className = 'banner';
     note.style.margin = '0 0 12px 0';
     note.style.borderRadius = '6px';
-    note.textContent = 'Interactive phantom demo. Your runs are private to this session and deleted after 12 h.';
+    note.textContent = 'Interactive demo on public data: a synthetic phantom and the AeroPath CTs. Your runs are private to this session and deleted after 12 h.';
     aside.prepend(note);
     const out = document.createElement('button');
     out.textContent = 'Sign out';
@@ -613,12 +629,13 @@ async function selectJob(id) {
   const r = j.result;
   const sum = $('summary');
   if (!r) { sum.innerHTML = `<div class="empty">Run ${id} is ${j.status}...</div>`; return; }
-  if (!r.ok) { sum.innerHTML = `<h3>Failed</h3><div class="err"></div>`; sum.querySelector('.err').textContent = (r.error || '') + '\n' + (r.traceback || ''); clearScene(); return; }
+  if (!r.ok) { sum.innerHTML = `<h3>Failed</h3><div class="err"></div>`; sum.querySelector('.err').textContent = (r.error || '') + '\n' + (r.traceback || ''); clearScene(); setCtRoute(null); return; }
 
   const rows = METRIC_ROWS.map(([k, label, unit, d]) => `<tr><th>${label}</th><td>${fmt(r.metrics[k], d)} ${unit}</td></tr>`).join('');
   const seg = r.segmentation || {}, tr = r.tree || {}, tg = r.target || {};
   sum.innerHTML = `
     <h3 style="margin-top:0"></h3>
+    <p style="margin:0 0 8px"><button id="btnRouteOnCt" type="button" style="width:auto">Show the route on the CT scan</button></p>
     ${(r.warnings || []).length ? '<ul class="warns">' + r.warnings.map((w) => `<li></li>`).join('') + '</ul>' : '<p class="legend">No warnings.</p>'}
     <h2>Route</h2><table>${rows}</table>
     <h2>Target</h2><table>
@@ -659,6 +676,8 @@ async function selectJob(id) {
     st.querySelectorAll('img').forEach((im) => im.addEventListener('click', () => { $('dlgImg').src = im.dataset.full; $('dlg').showModal(); }));
   } else st.innerHTML = '<div class="empty">No stills for this run.</div>';
   if (route && out.mesh_glb) await viewer.load(route, `${base}/${out.mesh_glb}`); else clearScene();
+  setCtRoute(route ? { id, job: j, route } : null);
+  $('btnRouteOnCt').addEventListener('click', () => showRouteOnCt());
   await loadJobEdit(id, route);
 }
 
@@ -673,13 +692,17 @@ async function previewBranch(jobId, pt) {
     });
     selectedEditEnd = pt;
     viewer.preview(replan);
+    setCtPreview(replan);
     const m = replan.metrics || {};
     $('previewMetricsText').textContent = `Length: ${fmt(m.length_mm, 0)} mm | Gap to nodule surface: ${fmt(m.gap_to_nodule_surface_mm, 1)} mm | Min lumen: ${fmt(m.min_diameter_mm, 1)} mm | Bifurcations: ${m.n_bifurcations || 0}`;
     $('editPreviewMetrics').style.display = 'block';
     $('btnResetRoute').style.display = 'inline-block';
     $('btnSaveEditedRoute').disabled = false;
+    const warn = (replan.warnings || []).filter((w) => !/chosen by the operator/.test(w)).join(' ');
+    ctEditSync(`Edited path: ${fmt(m.length_mm, 0)} mm, gap to nodule ${fmt(m.gap_to_nodule_surface_mm, 1)} mm, narrowest ${fmt(m.min_diameter_mm, 1)} mm, ${m.n_bifurcations || 0} bifurcations.${warn ? ' ' + warn : ''}`);
   } catch (e) {
-    alert('Cannot preview this branch: ' + e.message);
+    const msg = 'Cannot preview this path: ' + e.message;
+    if ($('ctEditMode').checked) ctEditSync(msg); else alert(msg);
   }
 }
 
@@ -691,6 +714,7 @@ async function loadJobEdit(id, route) {
   $('altTableBody').innerHTML = '';
   selectedEditEnd = null;
   viewer.clearPreview();
+  ctEditSync('');
 
   if (!route) return;
   try {
@@ -725,10 +749,12 @@ async function loadJobEdit(id, route) {
 
 $('btnResetRoute').addEventListener('click', () => {
   viewer.clearPreview();
+  setCtPreview(null);
   selectedEditEnd = null;
   $('editPreviewMetrics').style.display = 'none';
   $('btnResetRoute').style.display = 'none';
   $('btnSaveEditedRoute').disabled = true;
+  ctEditSync('');
 });
 
 $('btnSaveEditedRoute').addEventListener('click', async () => {
@@ -1118,6 +1144,146 @@ function ctGeom(p) {
   const s = w / mmW;
   return { w, h: Math.round(mmH * s), s };
 }
+/* ---- the planned route drawn on the CT (physical LPS mm -> voxel index -> pane pixels) */
+let ctRouteData = null;      // {id, job, pts, bif, target, radius, stepMm, ctId}: the selected run's route
+let ctPreviewPts = null;     // an edited path being previewed (orange)
+let ctPlayTimer = null;
+const ctIdxF = (pt) => {     // fractional voxel index of a physical point (ctIdx without the rounding)
+  const d = [pt[0] - ct.origin[0], pt[1] - ct.origin[1], pt[2] - ct.origin[2]];
+  return [0, 1, 2].map((c) => (ct.D[c] * d[0] + ct.D[3 + c] * d[1] + ct.D[6 + c] * d[2]) / ct.spacing[c]);
+};
+const ctRouteMatches = () => !!(ct && ctRouteData && ctRouteData.ctId && ctRouteData.ctId === ct.id);
+function ctPaneXY(p, v, g) {  // pane pixel of a fractional voxel index, and its distance in mm from the shown slice
+  const [sx, sy, sz] = ct.spacing, nz = ct.size[2];
+  if (p === 'ax') return { x: (v[0] + 0.5) * sx * g.s, y: (v[1] + 0.5) * sy * g.s, d: Math.abs(v[2] - cur.k) * sz };
+  if (p === 'co') return { x: (v[0] + 0.5) * sx * g.s, y: (nz - 1 - v[2] + 0.5) * sz * g.s, d: Math.abs(v[1] - cur.j) * sy };
+  return { x: (v[1] + 0.5) * sy * g.s, y: (nz - 1 - v[2] + 0.5) * sz * g.s, d: Math.abs(v[0] - cur.i) * sx };
+}
+function ctDrawPath(c, p, g, pts, near, far) {
+  const XY = pts.map((pt) => ctPaneXY(p, ctIdxF(pt), g)), tol = 2.0;  // within 2 mm of the slice = "in this slice"
+  c.lineWidth = 1.5; c.strokeStyle = far; c.beginPath();
+  XY.forEach((q, i) => (i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y))); c.stroke();
+  c.strokeStyle = near; c.lineWidth = 2.5; c.beginPath();
+  XY.forEach((q, i) => { if (i && q.d <= tol && XY[i - 1].d <= tol) { c.moveTo(XY[i - 1].x, XY[i - 1].y); c.lineTo(q.x, q.y); } });
+  c.stroke(); c.fillStyle = near;
+  XY.forEach((q) => { if (q.d <= tol) { c.beginPath(); c.arc(q.x, q.y, 2, 0, Math.PI * 2); c.fill(); } });
+}
+/* ---- editing the path on the CT: the airway tree is shown, a click picks the new end of the route */
+let ctTree = null;           // {id, nodes: [[x,y,z]...], edges: [[a,b]...]} of the selected run
+const ctEditActive = () => !!($('ctEditMode').checked && ctRouteMatches());
+async function ctLoadTree() {
+  const R = ctRouteData;
+  if (!R || (ctTree && ctTree.id === R.id)) return;
+  try { const t = await api(`/api/jobs/${R.id}/tree`); ctTree = { id: R.id, nodes: t.nodes, edges: t.edges }; ctRedrawAll(); }
+  catch (e) { $('ctEditInfo').textContent = 'The airway tree is not available for this run: ' + e.message; }
+}
+function ctDrawTree(c, p, g) {
+  const T = ctTree; if (!T || !ctRouteData || T.id !== ctRouteData.id) return;
+  const XY = T.nodes.map((n) => ctPaneXY(p, ctIdxF(n), g));
+  c.strokeStyle = 'rgba(56,232,255,0.28)'; c.lineWidth = 1; c.beginPath();
+  T.edges.forEach(([a, b]) => { c.moveTo(XY[a].x, XY[a].y); c.lineTo(XY[b].x, XY[b].y); });
+  c.stroke(); c.fillStyle = 'rgba(56,232,255,0.9)';
+  XY.forEach((q) => { if (q.d <= 2.0) { c.beginPath(); c.arc(q.x, q.y, 2.2, 0, Math.PI * 2); c.fill(); } });
+}
+function ctEditSync(text) {  // buttons and note follow whether an edited path is being previewed
+  const has = !!selectedEditEnd;
+  $('ctEditReset').disabled = !has; $('ctEditSave').disabled = !has;
+  $('ctEditInfo').textContent = text || '';
+}
+$('ctEditMode').addEventListener('change', () => {
+  if ($('ctEditMode').checked) { if (!ctRouteMatches()) { $('ctEditInfo').textContent = 'Load this run\'s CT first.'; $('ctEditMode').checked = false; return; } ctLoadTree(); }
+  $('cvAx').style.cursor = $('cvCo').style.cursor = $('cvSa').style.cursor = $('ctEditMode').checked ? 'copy' : '';
+  ctRedrawAll();
+});
+$('ctEditReset').addEventListener('click', () => $('btnResetRoute').click());
+$('ctEditSave').addEventListener('click', () => { ctEditSync('Saving and rendering the edited route...'); $('btnSaveEditedRoute').click(); });
+
+function ctDrawRoute(c, p, g) {
+  if (!$('ctShowRoute').checked || !ctRouteMatches()) return;
+  const R = ctRouteData;
+  if (ctEditActive()) ctDrawTree(c, p, g);
+  if (R.pts.length) {
+    ctDrawPath(c, p, g, R.pts, '#2ee66b', 'rgba(46,230,107,0.30)');
+    c.font = '10px system-ui'; c.textAlign = 'left'; c.textBaseline = 'bottom';
+    R.bif.forEach((b, i) => {
+      const q = ctPaneXY(p, ctIdxF(b), g);
+      if (q.d <= 3) { c.fillStyle = '#fff'; c.beginPath(); c.arc(q.x, q.y, 3.2, 0, Math.PI * 2); c.fill(); c.fillStyle = '#cfd8e3'; c.fillText(String(i + 1), q.x + 5, q.y - 3); }
+    });
+    const e = ctPaneXY(p, ctIdxF(R.pts[R.pts.length - 1]), g);
+    if (e.d <= 3) { c.fillStyle = '#2b82ff'; c.beginPath(); c.arc(e.x, e.y, 4, 0, Math.PI * 2); c.fill(); }
+    if (R.target) {
+      const q = ctPaneXY(p, ctIdxF(R.target), g);
+      if (q.d <= R.radius) {  // the circle the target sphere makes in this slice
+        const rr = Math.sqrt(R.radius * R.radius - q.d * q.d);
+        c.strokeStyle = '#ffd23f'; c.lineWidth = 2; c.beginPath(); c.arc(q.x, q.y, Math.max(2, rr * g.s), 0, Math.PI * 2); c.stroke();
+      }
+    }
+  }
+  if (ctPreviewPts && ctPreviewPts.length) {
+    ctDrawPath(c, p, g, ctPreviewPts, '#ff9f1a', 'rgba(255,159,26,0.30)');
+    const e = ctPaneXY(p, ctIdxF(ctPreviewPts[ctPreviewPts.length - 1]), g);  // where the edited path really ends (snapped to the airway)
+    if (e.d <= 3) { c.fillStyle = '#ff9f1a'; c.beginPath(); c.arc(e.x, e.y, 4.5, 0, Math.PI * 2); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke(); }
+  }
+}
+function ctRouteStatus() {
+  const R = ctRouteData;
+  if (!R || !R.pts.length) { $('ctRouteLabel').textContent = ''; return; }
+  const total = Math.round(R.stepMm * (R.pts.length - 1)), at = Math.round(R.stepMm * Number($('ctRoutePos').value));
+  $('ctRouteLabel').textContent = ctRouteMatches()
+    ? `${at} of ${total} mm along the route`
+    : 'This run\'s CT is not open. Press "Load this run\'s CT".';
+}
+function ctFollow(i) {  // put the crosshair on route point i so all three panes show it
+  const R = ctRouteData;
+  if (!ct || !ctRouteMatches() || !R.pts[i]) return;
+  const v = ctIdxF(R.pts[i]).map(Math.round);
+  cur = { i: v[0], j: v[1], k: v[2] }; ct.huText = '';
+  ctRouteStatus(); ctRefresh();
+}
+function stopCtPlay() { clearInterval(ctPlayTimer); ctPlayTimer = null; $('ctRoutePlay').textContent = 'Play'; }
+function setCtRoute(info) {  // the selected run changed (or none)
+  stopCtPlay();
+  ctRouteData = null;
+  if (info) {
+    const r = info.route, pts = (r.path && r.path.points_mm) || [];
+    ctRouteData = {
+      id: info.id, job: info.job, pts, ctId: null,
+      bif: (r.bifurcations || []).map((b) => b.point_mm).filter(Boolean),
+      target: r.target && (r.target.center_mm || r.target.target_lps_mm), radius: (r.target && r.target.radius_mm) || 5,
+      stepMm: (r.path && r.path.step_mm) || 1,
+    };
+    if (!pts.length) ctRouteData = null;
+  }
+  const has = !!ctRouteData;
+  if ($('btnRouteOnCt')) $('btnRouteOnCt').hidden = !has;
+  $('ctRouteBar').hidden = $('ctRouteLegend').hidden = !has;
+  $('ctRoutePos').max = has ? ctRouteData.pts.length - 1 : 0; $('ctRoutePos').value = 0;
+  $('ctEditBar').hidden = !has;
+  // the same CT is already open when this is the run just viewed, or the edit saved from it
+  if (has && ct && (ct.routeFor === info.id || (ct.routeFor && ct.routeFor === (info.job.params || {}).base_job))) {
+    ctRouteData.ctId = ct.id; ct.routeFor = info.id;
+  }
+  ctPreviewPts = null; selectedEditEnd = null; ctEditSync(''); ctTree = null;
+  ctRouteStatus(); ctRedrawAll();
+  if (has && ctRouteData.ctId && $('ctEditMode').checked) ctLoadTree();
+}
+function setCtPreview(replan) {
+  ctPreviewPts = replan && replan.path && replan.path.points_mm && replan.path.points_mm.length ? replan.path.points_mm : null;
+  ctRedrawAll();
+}
+$('ctShowRoute').addEventListener('change', () => ctRedrawAll());
+$('ctRoutePos').addEventListener('input', () => ctFollow(Number($('ctRoutePos').value)));
+$('ctRoutePlay').addEventListener('click', () => {
+  if (ctPlayTimer) { stopCtPlay(); return; }
+  if (!ctRouteMatches()) return;
+  $('ctRoutePlay').textContent = 'Pause';
+  ctPlayTimer = setInterval(() => {
+    const s = $('ctRoutePos'); let v = Number(s.value) + 2;
+    if (v >= Number(s.max)) { v = Number(s.max); stopCtPlay(); }
+    s.value = v; ctFollow(v);
+  }, 120);
+});
+
 function ctDraw(p) {
   if (!ct) return;
   const cv = $(PLANE[p].cv), g = ctGeom(p), dpr = window.devicePixelRatio || 1;
@@ -1125,6 +1291,7 @@ function ctDraw(p) {
   const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.fillStyle = '#000'; c.fillRect(0, 0, g.w, g.h);
   const img = ctImgs[p]; if (img) { c.imageSmoothingEnabled = true; c.drawImage(img, 0, 0, g.w, g.h); }
+  ctDrawRoute(c, p, g);
   const [nx, ny, nz] = ct.size, [sx, sy, sz] = ct.spacing;
   const px = p === 'sa' ? (cur.j + 0.5) * sy * g.s : (cur.i + 0.5) * sx * g.s;
   const py = p === 'ax' ? (cur.j + 0.5) * sy * g.s : (nz - 1 - cur.k + 0.5) * sz * g.s;
@@ -1182,7 +1349,13 @@ function ctClick(p, e) {
   if (p === 'ax') { cur.i = Math.floor(x / (sx * g.s)); cur.j = Math.floor(y / (sy * g.s)); }
   else if (p === 'co') { cur.i = Math.floor(x / (sx * g.s)); cur.k = nz - 1 - Math.floor(y / (sz * g.s)); }
   else { cur.j = Math.floor(x / (sy * g.s)); cur.k = nz - 1 - Math.floor(y / (sz * g.s)); }
-  placed = true; ct.huText = '';
+  ct.huText = '';
+  if (ctEditActive()) {  // editing the path: this click is the wanted end of the route, not a nodule
+    ctRefresh();
+    previewBranch(ctRouteData.id, ctPhys(cur.i, cur.j, cur.k).map((v) => Math.round(v * 10) / 10));
+    return;
+  }
+  placed = true;
   ctRefresh();
 }
 ['ax', 'co', 'sa'].forEach((p) => $(PLANE[p].cv).addEventListener('click', (e) => ctClick(p, e)));
@@ -1252,11 +1425,16 @@ async function openCt() {
   } else if (src === 'phantom' && activePhantomNodule) {
     req.nodule = activePhantomNodule;
   }
+  await loadCtFromRequest(req);
+}
+
+// open a CT (the request is what /api/ct/open takes) and show it; opts.cursorAt = a physical point to centre on
+async function loadCtFromRequest(req, opts = {}) {
   $('pickInfo').textContent = 'Loading the CT (a few seconds)...'; $('openCt').disabled = true;
   try {
     const d = await api('/api/ct/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
     const same = ct && ct.id === d.ct_id;
-    ct = { id: d.ct_id, size: d.size, spacing: d.spacing, origin: d.origin, D: d.direction, name: d.name, hint: d.hint, huText: '' };
+    ct = { id: d.ct_id, size: d.size, spacing: d.spacing, origin: d.origin, D: d.direction, name: d.name, hint: d.hint, huText: '', routeFor: same && ct.routeFor ? ct.routeFor : null };
     $('ctName').textContent = `${d.name}: ${d.size.join(' x ')} voxels, ${d.spacing.join(' x ')} mm`;
     $('ctSlice').max = ct.size[2] - 1;
     if (!same) {
@@ -1269,11 +1447,38 @@ async function openCt() {
     if (d.hint) { h.textContent = `Jump to ${d.hint.label}`; h.onclick = () => { const [i, j, k] = ctIdx(d.hint.target_mm); cur = { i, j, k }; placed = true; ct.huText = ''; $('ctRad').value = d.hint.radius_mm; $('radius').value = d.hint.radius_mm; ctRefresh(); }; }
     $('ctEmpty').hidden = true; $('ctWrap').hidden = false;
     $('pickInfo').textContent = picked ? $('pickInfo').textContent : 'CT open: click the nodule in the CT tab.';
+    if (opts.cursorAt) {
+      const v = ctIdx(opts.cursorAt); cur = { i: v[0], j: v[1], k: v[2] }; clampIdx();
+    }
     showTab('ctview'); ctRefresh(); $('cvAx').focus();
-  } catch (e) { $('pickInfo').textContent = e.message; }
-  $('openCt').disabled = false;
+    return d;
+  } catch (e) { $('pickInfo').textContent = e.message; return null; } finally { $('openCt').disabled = false; }
 }
 $('openCt').addEventListener('click', openCt);
+
+// "Show the route on the CT scan": open the CT this run was planned on and draw its route over it
+async function showRouteOnCt() {
+  const R = ctRouteData; if (!R) return;
+  const p = (R.job && R.job.params) || {};
+  let base = p;
+  if (p.source === 'edit' && p.base_job) { try { base = (await api(`/api/jobs/${p.base_job}`)).params || {}; } catch (e) { base = {}; } }
+  const src = p.source === 'edit' ? (p.base_source || base.source) : p.source;
+  const req = { source: src, case: Number(base.case || p.case || 1) };
+  if (src === 'upload') {
+    req.upload_id = base.upload_id || p.upload_id;
+    if (!req.upload_id) { setStatus('This run used an imported scan that is no longer registered, so its CT cannot be reopened.', true); return; }
+    if (base.stack || p.stack) req.stack = base.stack || p.stack;
+  }
+  if (src === 'phantom' && base.phantom_nodule) req.nodule = base.phantom_nodule;
+  // keep the left-hand selectors in step, so the next run uses the same CT
+  if ([...$('source').options].some((o) => o.value === src)) { $('source').value = src; if (src === 'aeropath') $('case').value = req.case; syncSource(); }
+  activePhantomNodule = src === 'phantom' && req.nodule ? req.nodule : null;
+  const d = await loadCtFromRequest(req, { cursorAt: R.target || R.pts[R.pts.length - 1] });
+  if (!d) return;
+  ct.routeFor = R.id; R.ctId = ct.id;
+  $('ctRoutePos').value = 0; ctRouteStatus(); ctRedrawAll();
+}
+$('ctLoadRunCt').addEventListener('click', () => showRouteOnCt());
 $('source').addEventListener('change', () => { picked = null; activePhantomNodule = null; $('pickInfo').textContent = 'No point chosen yet.'; ct = null; $('ctWrap').hidden = true; $('ctEmpty').hidden = false; });
 
 /* ------------------------------------------------------------ start */

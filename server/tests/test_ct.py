@@ -153,12 +153,32 @@ def test_public_visitors_get_the_phantom_ct_viewer_and_no_other_ct(phantom_ct):
     assert pub.status_code == 200 and pub.json()["ct_id"] == d["ct_id"]  # the shared cached phantom
     assert client.get(f"/api/ct/{d['ct_id']}/slice", params={"plane": "axial", "i": 1}, headers=PROXY).status_code == 200
     assert client.get(f"/api/ct/{d['ct_id']}/hu", params={"i": 1, "j": 1, "k": 1}, headers=PROXY).status_code == 200
-    # nothing else: other sources are refused, and another CT's id is not usable even if guessed
-    assert client.post("/api/ct/open", json={"source": "aeropath", "case": 3}, headers=PROXY).status_code == 403
+    # imports are refused, AeroPath is allowed (404: none on this test machine), and an uploaded CT's id is not usable
+    assert client.post("/api/ct/open", json={"source": "aeropath", "case": 3}, headers=PROXY).status_code == 404
     assert client.post("/api/ct/open", json={"source": "upload", "upload_id": up}, headers=PROXY).status_code == 403
     assert client.get(f"/api/ct/{other}/slice", params={"plane": "axial", "i": 1}, headers=PROXY).status_code == 404
     assert client.get(f"/api/ct/{other}/hu", params={"i": 1, "j": 1, "k": 1}, headers=PROXY).status_code == 404
     assert client.get(f"/api/ct/{other}/slice", params={"plane": "axial", "i": 1}).status_code == 200  # local still can
+
+
+def test_public_visitors_can_view_an_aeropath_ct_but_loads_are_rate_limited(api):
+    client, tmp = api
+    import app.main as main
+
+    case = tmp / "aero" / "3"
+    case.mkdir(parents=True)
+    img = sitk.GetImageFromArray(np.full((10, 12, 14), -700, dtype=np.int16))
+    sitk.WriteImage(img, str(case / "3_CT_HR.nii.gz"))
+    main.AEROPATH_ROOT = tmp / "aero"
+    assert client.post("/api/login", json={"passcode": PASSCODE}, headers=PROXY).status_code == 200
+    r = client.post("/api/ct/open", json={"source": "aeropath", "case": 3}, headers=PROXY)
+    assert r.status_code == 200, r.text
+    cid = r.json()["ct_id"]
+    assert client.get(f"/api/ct/{cid}/slice", params={"plane": "axial", "i": 1}, headers=PROXY).status_code == 200
+    assert client.get(f"/api/ct/{cid}/hu", params={"i": 1, "j": 1, "k": 1}, headers=PROXY).status_code == 200
+    main.AEROPATH_OPENS_PER_WINDOW = 2
+    assert client.post("/api/ct/open", json={"source": "aeropath", "case": 3}, headers=PROXY).status_code == 200  # 2nd
+    assert client.post("/api/ct/open", json={"source": "aeropath", "case": 3}, headers=PROXY).status_code == 429  # 3rd
 
 
 def test_open_phantom_with_custom_nodule_and_validation(api):

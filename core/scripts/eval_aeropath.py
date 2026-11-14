@@ -112,9 +112,12 @@ def main() -> int:
                     help="labeling connectivity for region growing (default: the library default)")
     ap.add_argument("--step", type=int, default=None, help="threshold ladder step in HU (default 25)")
     ap.add_argument("--smooth-mm", type=float, default=0.0, help="Gaussian sigma (mm) applied before thresholding")
+    ap.add_argument("--small-airways", action="store_true", help="also extend into thin distal branches (segmentation/small_airways.py)")
     args = ap.parse_args()
 
     seg_kwargs: dict = {}
+    if args.small_airways:
+        seg_kwargs["small_airways"] = True
     if args.connectivity is not None:
         seg_kwargs["connectivity"] = args.connectivity
     if args.step is not None:

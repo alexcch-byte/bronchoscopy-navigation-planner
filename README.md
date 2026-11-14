@@ -10,7 +10,7 @@ Virtual bronchoscopy planning from chest CT: load a CT, build a 3D airway model,
 |---|---|
 | `core/` pipeline (ingest, airway segmentation, centerline tree, routing, VB rendering, CLI) | Built. 44 core tests, 23 console API tests, 8 CT tests (75 total passing). Routing and rendering have run end to end on 8 real AeroPath cases and the phantom. |
 | Real CT validation | Airway segmentation scored on AeroPath (26 of 27 cases): mean Dice 0.86, precision 0.97, but only about 55% of the true centerline reached. See [Evaluating on AeroPath](#evaluating-on-aeropath) and `docs/aeropath_eval_2026-11-10.md`. |
-| `server/` (FastAPI + test console) | Local test console with CT slice viewer, custom nodule placement in phantom, 3D airway tree with alternatives and path editing, and live Funnel demo with interactive phantom tier. |
+| `server/` (FastAPI + test console) | Local test console with CT slice viewer, custom nodule placement in phantom, 3D airway tree with alternatives and path editing, and a live Funnel demo on public data (phantom and AeroPath). |
 | `web/` (React + TypeScript) | Placeholder page. |
 | Docker stack | Written but never run: Docker is not installed on the dev machine. |
 | ML airway segmentation, nodule-aware exit scoring, branch labels | Not started (Phases 2–3). |
@@ -52,6 +52,16 @@ python -m venv ~/venvs/bronchnav
 ~/venvs/bronchnav/Scripts/python -m pytest core
 ~/venvs/bronchnav/Scripts/bronchnav info path/to/dicom_folder_or_ct.mha
 ```
+
+### GPU acceleration (NVIDIA CUDA, optional)
+
+With an NVIDIA GPU the heavy array steps (threshold-ladder labeling, the thin-airway tube filter, morphology) run on the GPU through CuPy; without one everything runs on the CPU and gives the same masks.
+
+```bash
+~/venvs/bronchnav/Scripts/python -m pip install -e "core[gpu]"     # installs cupy-cuda12x with the CUDA 12 runtime libraries
+```
+
+It is picked up automatically. `BRONCHNAV_GPU=0` forces the CPU, `BRONCHNAV_GPU=1` fails loudly if no usable GPU is found. If the GPU fails mid-run (out of memory, driver error) the step is repeated on the CPU, so a GPU problem never fails a run. Measured on an RTX 4070 with AeroPath case 5 (a 413 x 442 x 442 grid): the thin-airway extension 10.5 s on the CPU vs 0.3 s on the GPU, the threshold ladder 4.5 s vs 1.5 s, and a whole planning job 36 s vs 11 s (the very first run on a machine also pays about 20 s of one-time CUDA kernel compilation; it is cached on disk afterwards). The video render and the centerline tree are unchanged.
 
 ### Try it on the synthetic phantom
 
@@ -162,7 +172,7 @@ A page for trying the pipeline without the command line: pick the synthetic phan
 - The 3D view loads three.js from a CDN, so the page needs internet once. This is a developer tool, not the Phase 4 app: no login, never expose it beyond localhost or a tailnet (imports are refused on a proxied URL).
 - Code: `server/app/main.py` (jobs API), `server/app/static/index.html` (page), `core/scripts/plan_job.py` (one job, run as a subprocess).
 
-### Public demo over Tailscale Funnel (passcode, interactive phantom tier)
+### Public demo over Tailscale Funnel (passcode, public data only)
 
 Example setup: **`https://<your-node>.<your-tailnet>.ts.net:8443` put on the public internet through Tailscale Funnel**, behind a passcode.
 
@@ -170,7 +180,7 @@ Example setup: **`https://<your-node>.<your-tailnet>.ts.net:8443` put on the pub
 tailscale funnel --bg --https=8443 http://127.0.0.1:8000    # publish (public internet)
 tailscale serve status                                       # ":8443 (Funnel on)"
 tailscale funnel --https=8443 off                            # stop publishing
-tailscale serve --bg --https=8443 http://127.0.0.1:8000     # tailnet-only instead (still passcode + phantom-only)
+tailscale serve --bg --https=8443 http://127.0.0.1:8000     # tailnet-only instead (still passcode + public data only)
 ```
 
 How access works (`server/app/main.py`). The tier is decided only by whether a request came through a proxy (Funnel and `serve` add forwarding headers), never by Tailscale identity headers, because a client could forge those on a public Funnel:
@@ -178,9 +188,9 @@ How access works (`server/app/main.py`). The tier is decided only by whether a r
 | Tier | Who | Can do |
 |---|---|---|
 | local | a direct request from this PC (`http://127.0.0.1:8000`) | everything: run jobs on phantom/AeroPath/imports, import scans, view logs |
-| public | anything through the proxy, including your own phone on the tailnet | sign in with passcode, then **interactive phantom demo**: place custom nodules in the phantom CT, run planning, view 3D airway tree with ranked alternative branches, preview replanned paths, and save edited runs |
+| public | anything through the proxy, including your own phone on the tailnet | sign in with passcode, then **interactive demo on public data**: pick the synthetic phantom or any of the AeroPath cases, scroll the CT and pick or place a nodule, run planning, view 3D airway tree with ranked alternative branches, preview replanned paths, and save edited runs |
 
-For the public tier: only the synthetic phantom CT is available (no AeroPath, no imports or local paths, no job logs or raw scan files). Runs are private to the session and deleted after 12 hours. Public limits: 1 active run per session, max 12 runs/hour per session, max 3 active runs globally, 7-minute execution timeout, and max 30 kept public runs. With no passcode configured the public tier is closed (HTTP 503), never open. Sign-ins are rate limited (8 wrong attempts per 10 minutes per client), sessions last 12 hours and end when the server restarts or the passcode changes.
+For the public tier: only public data is available, the synthetic phantom and the AeroPath CTs (CC BY 4.0; attribution in the page footer). There are no imports or local paths, no job logs, and the raw volumes and airway masks cannot be downloaded: visitors get windowed CT slices, the route, the 3D mesh, stills and video. Opening an AeroPath CT in the viewer is capped at 20 loads per 10 minutes per client. Runs are private to the session and deleted after 12 hours. Public limits: 1 active run per session, no hourly cap (set `PUBLIC_MAX_PER_HOUR` in `server/app/main.py` to turn one on), max 3 active runs globally, 7-minute execution timeout, and max 30 kept public runs. With no passcode configured the public tier is closed (HTTP 503), never open. Sign-ins are rate limited (8 wrong attempts per 10 minutes per client), sessions last 12 hours and end when the server restarts or the passcode changes.
 
 - **Passcode:** the first line of `%USERPROFILE%\bronchnav-demo-passcode.txt` (outside the Drive folder; override with `DEMO_PASSCODE` or `DEMO_PASSCODE_FILE`; at least 8 characters). Edit the file to change it; it takes effect immediately and signs everyone out.
 - The console must be running (`python server/run_local.py`) on this PC, and the PC must be on, for the URL to work. Anyone can read what the visitors see: only public-data runs, with a CC BY 4.0 attribution in the footer.

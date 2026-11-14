@@ -182,7 +182,7 @@ def main() -> int:
                 else:
                     lungs = rough_lung_mask(hu)
                     how = "auto: point beyond a distal airway tip inside an approximate threshold lung mask (not a nodule)"
-                seg = segment_airway(hu, SP)
+                seg = segment_airway(hu, SP, small_airways=True)  # the same mask run_plan will use
                 tree = build_tree(seg.mask, SP, seg.seed_zyx)
                 e, tgt_grid, geo, ahead = choose_target(tree, lungs, SP, args.percentile, args.ahead_mm)
                 target = grid.points_to_physical(tgt_grid)

@@ -158,6 +158,7 @@ def run_plan(
     speed_mm_s: float = 8.0,
     log=print,
     image_stack: dict | None = None,
+    small_airways: bool = True,
 ) -> PlanResult:
     """`image_stack`: when `ct_path` is a folder of JPEG/PNG/... slices instead of DICOM, pass the keyword
     arguments of `bronchnav.io.load_image_stack` (pixel_spacing_mm, slice_spacing_mm, window_center, ...)."""
@@ -175,7 +176,7 @@ def run_plan(
     hu = sitk.GetArrayFromImage(image)
 
     log("segmenting airway")
-    seg = segment_airway(hu, spacing_mm, leak_factor=leak_factor, min_leak_jump_ml=min_leak_jump_ml)
+    seg = segment_airway(hu, spacing_mm, leak_factor=leak_factor, min_leak_jump_ml=min_leak_jump_ml, small_airways=small_airways)
     for n in seg.notes:
         log(f"  note: {n}")
     log(f"  threshold {seg.threshold_hu} HU, volume {seg.volumes_ml[seg.threshold_hu]:.1f} mL")

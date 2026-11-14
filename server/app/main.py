@@ -102,11 +102,11 @@ def _require_local(request: Request) -> None:
 # Two tiers, decided only by whether the request came through a proxy (Tailscale serve/funnel adds
 # forwarding headers; a direct request from this PC has none):
 #   local   - no proxy headers: everything works (run jobs, import scans, logs, file paths).
-#   public  - any proxied request: passcode login required, then FUNCTIONAL but PHANTOM-ONLY: run the synthetic
-#             phantom, use its CT viewer, pick a nodule, edit the path, render. No other CT (no AeroPath, no
-#             imports, no local paths), no logs, no scans. Each session sees only its own runs plus the owner's
-#             local phantom runs; one run at a time per session, an hourly cap, a global cap, a job timeout,
-#             bounded parameters, and old public runs are deleted.
+#   public  - any proxied request: passcode login required, then FUNCTIONAL on PUBLIC DATA ONLY: the synthetic
+#             phantom and the AeroPath dataset (CC BY 4.0). Use the CT viewer, pick a nodule, edit the path, render.
+#             No imports, no local paths, no logs, and the raw volumes/masks are never downloadable. Each session
+#             sees only its own runs plus the owner's local phantom/AeroPath runs; one run at a time per session,
+#             an optional hourly cap (off), a global cap, a job timeout, bounded parameters, and old public runs are deleted.
 # The tier is NOT taken from Tailscale identity headers (a client could forge them on a public Funnel), so a
 # phone on the owner's own tailnet also logs in with the passcode. With no passcode configured, public access
 # is closed (503), never open.
@@ -117,12 +117,18 @@ MIN_PASSCODE = 8
 LOGIN_ATTEMPTS = 8  # per client, per LOGIN_WINDOW seconds
 LOGIN_WINDOW = 600
 PUBLIC_MAX_ACTIVE_PER_SESSION = 1  # a visitor can have one run queued or running at a time
-PUBLIC_MAX_PER_HOUR = 12           # runs per visitor session per hour
+PUBLIC_MAX_PER_HOUR: int | None = None  # runs per visitor per hour; None = no hourly cap (released 2026-11-13)
 PUBLIC_MAX_ACTIVE_TOTAL = 3        # public runs queued or running across all visitors
 PUBLIC_KEEP_JOBS = 30              # finished public runs kept on disk
 PUBLIC_JOB_MAX_AGE_S = 12 * 3600
 JOB_TIMEOUT_S = 420                # a run is stopped after this long
 PHANTOM_BOUNDS = ((-80.0, 80.0), (-80.0, 80.0), (-110.0, 110.0))  # physical LPS mm around the phantom volume
+# CTs a public visitor may open and plan on: the synthetic phantom and the public AeroPath dataset (CC BY 4.0,
+# anonymised research data). Imported scans and local paths are never available. The raw volumes and masks are
+# not downloadable either: only route.json, the mesh, stills, video and windowed CT slices are served.
+PUBLIC_SOURCES = ("phantom", "aeropath")
+AEROPATH_OPENS_PER_WINDOW = 20  # CT-viewer loads of an AeroPath case per client per LOGIN_WINDOW (each reads ~200 MB)
+_aeropath_opens: dict[str, list[float]] = {}
 SID_RE = re.compile(r"^[a-f0-9]{8}$")
 JOB_ID_RE = re.compile(r"^\d{8}-\d{6}-[a-f0-9]{6}$")
 PUBLIC_POST_RE = re.compile(r"^/api/jobs/[^/]+/(replan|edits)$")
@@ -215,7 +221,7 @@ def _can_see(request: Request, job: dict | None) -> bool:
         return False
     if not _is_public(request):
         return True
-    return _data_source(job) == "phantom" and job.get("owner") in ("local", _sid(request))
+    return _data_source(job) in PUBLIC_SOURCES and job.get("owner") in ("local", _sid(request))
 
 
 class Login(BaseModel):
@@ -283,7 +289,7 @@ async def public_gate(request: Request, call_next):
     if request.method == "POST" and (
         path in ("/api/jobs", "/api/ct/open", "/api/logout") or PUBLIC_POST_RE.match(path)
     ):
-        return await call_next(request)  # the handlers still enforce phantom-only and the limits
+        return await call_next(request)  # the handlers still enforce public-data-only and the limits
     return JSONResponse({"detail": "not available in the public demo"}, status_code=403)
 
 
@@ -549,8 +555,14 @@ def delete_upload(up_id: str, request: Request) -> dict:
 
 # ---------------------------------------------------------------- CT viewer
 def _ct_guard_open(request: Request, req) -> None:
-    if _is_public(request) and req.source != "phantom":
-        raise HTTPException(403, "the public demo only has the synthetic phantom CT")
+    if _is_public(request) and req.source not in PUBLIC_SOURCES:
+        raise HTTPException(403, "the public demo only has the synthetic phantom and the public AeroPath CTs")
+    if _is_public(request) and req.source == "aeropath":
+        now, key = time.time(), _client_key(request)
+        recent = [t for t in _aeropath_opens.get(key, []) if now - t < LOGIN_WINDOW]
+        if len(recent) >= AEROPATH_OPENS_PER_WINDOW:
+            raise HTTPException(429, "Too many CT loads. Try again in a few minutes.")
+        _aeropath_opens[key] = recent + [now]
     if _is_public(request) and getattr(req, "nodule", None):
         nod = req.nodule
         for v, (lo, hi), name in zip(nod.center, PHANTOM_BOUNDS, "xyz"):
@@ -559,7 +571,7 @@ def _ct_guard_open(request: Request, req) -> None:
 
 
 def _ct_guard_use(request: Request, ct) -> None:
-    if _is_public(request) and not ct.key.startswith("phantom"):
+    if _is_public(request) and not ct.key.startswith(("phantom", "aeropath:")):
         raise HTTPException(404, "unknown or expired CT: open it again")
 
 
@@ -681,8 +693,9 @@ def _public(job: dict, with_log: bool = False) -> dict:
 
 @app.get("/api/cases")
 def cases(request: Request) -> dict:
-    if _is_public(request):  # the phantom only; no local paths; nothing to import
-        return {"phantom": True, "aeropath": [], "mode": "public", "can_run": True, "imports_allowed": False}
+    if _is_public(request):  # phantom + public AeroPath cases; no local paths; nothing to import
+        return {"phantom": True, "aeropath": _aeropath_cases(), "mode": "public", "can_run": True, "imports_allowed": False,
+                "aeropath_unsupported": {str(k): v for k, v in AEROPATH_UNSUPPORTED.items()}}
     return {
         "phantom": True,
         "aeropath": _aeropath_cases(),
@@ -693,6 +706,7 @@ def cases(request: Request) -> dict:
         "image_formats": list(IMAGE_EXTS),
         "mode": "local",
         "can_run": True,
+        "aeropath_unsupported": {str(k): v for k, v in AEROPATH_UNSUPPORTED.items()},
         "public_access": _passcode_state(),  # owner-only: whether visitors can sign in, and why not
     }
 
@@ -709,7 +723,7 @@ def _enforce_public_quota(request: Request) -> str:
     mine = [j for j in _jobs.values() if j.get("owner") == sid or (j.get("client") == client and j.get("owner") not in (None, "local"))]
     if any(j["status"] in ("queued", "running") for j in mine):
         raise HTTPException(429, "You already have a run in progress. Wait for it to finish.")
-    if sum(1 for j in mine if now - j["created"] < 3600) >= PUBLIC_MAX_PER_HOUR:
+    if PUBLIC_MAX_PER_HOUR is not None and sum(1 for j in mine if now - j["created"] < 3600) >= PUBLIC_MAX_PER_HOUR:
         raise HTTPException(429, f"Limit of {PUBLIC_MAX_PER_HOUR} runs per hour reached. Try again later.")
     active = sum(1 for j in _jobs.values() if j.get("owner") not in (None, "local") and j["status"] in ("queued", "running"))
     if active >= PUBLIC_MAX_ACTIVE_TOTAL:
@@ -724,8 +738,8 @@ def _check_public_params(
     min_diameter: float,
     phantom_nodule: PhantomNodule | None = None,
 ) -> None:
-    if source != "phantom":
-        raise HTTPException(403, "the public demo only has the synthetic phantom CT")
+    if source not in PUBLIC_SOURCES:
+        raise HTTPException(403, "the public demo only has the synthetic phantom and the public AeroPath CTs")
     if not (1.0 <= radius <= 15.0):
         raise HTTPException(422, "nodule radius must be 1-15 mm in the public demo")
     if not (1.5 <= min_diameter <= 6.0):
@@ -733,9 +747,14 @@ def _check_public_params(
     if target is not None:
         if not all(math.isfinite(v) for v in target):
             raise HTTPException(422, "target must be finite numbers")
-        for v, (lo, hi), name in zip(target, PHANTOM_BOUNDS, "xyz"):
-            if not lo <= v <= hi:
-                raise HTTPException(422, f"target {name} must be within {lo:g}..{hi:g} mm (the phantom's volume)")
+        if source == "phantom":
+            for v, (lo, hi), name in zip(target, PHANTOM_BOUNDS, "xyz"):
+                if not lo <= v <= hi:
+                    raise HTTPException(422, f"target {name} must be within {lo:g}..{hi:g} mm (the phantom's volume)")
+        elif any(abs(v) > 2000.0 for v in target):  # a real scan's frame is not fixed; the planner still checks the target is inside the lung
+            raise HTTPException(422, "target is outside any plausible scan volume")
+    if phantom_nodule is not None and source != "phantom":
+        raise HTTPException(422, "a custom nodule only applies to the phantom")
     if phantom_nodule is not None:
         if not (1.0 <= phantom_nodule.radius_mm <= 15.0):
             raise HTTPException(422, "phantom nodule radius must be 1-15 mm in the public demo")
@@ -904,14 +923,37 @@ def create_edit(job_id: str, body: EditRun, request: Request) -> dict:
     return _public(_admit(request, params, cmd_for))
 
 
+# Failures a visitor is told the reason for. The text shown is fixed (matched on the raw error, never copied
+# from it), so a path or any other detail of the scan cannot leak through it. Anything else is "the run failed".
+KNOWN_FAILURES = (
+    ("Region growing already exceeds",
+     "This scan cannot be segmented automatically: the lung tissue itself is as dark as air (typical of emphysema), "
+     "so threshold growing floods the lung. A learned model is planned for cases like this. Try another case."),
+    ("No trachea seed found",
+     "The trachea could not be found in this scan. Check that the top of the chest is included."),
+    ("seed is not in air at any tested threshold",
+     "The airway could not be located in this scan."),
+)
+# AeroPath cases the classical segmenter is known to reject (shown in the case list so visitors are not surprised).
+AEROPATH_UNSUPPORTED = {9: "emphysema: the lung is as dark as air"}
+
+
+def _public_error(raw: object) -> str:
+    text = str(raw or "")
+    for key, message in KNOWN_FAILURES:
+        if key in text:
+            return message
+    return "the run failed"
+
+
 def _redacted(job: dict) -> dict:
-    """What a public visitor may see of a run: no log, no tracebacks or error text (they can hold local paths)."""
+    """What a public visitor may see of a run: no log, no tracebacks or raw error text (they can hold local paths)."""
     d = _public(job)
     r = d.get("result")
     if isinstance(r, dict):
         r = {k: v for k, v in r.items() if k not in ("traceback", "image_stack")}
         if "error" in r:
-            r["error"] = "the run failed"
+            r["error"] = _public_error(r["error"])
         d["result"] = r
     return d
 

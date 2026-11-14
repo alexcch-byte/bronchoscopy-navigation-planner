@@ -314,7 +314,7 @@ Second-opinion reviews with the Antigravity CLI (`agy`):
 | Core pipeline (ingest, airway segmentation, tree, routing, rendering) | Built, 49 tests. Real-CT baseline on AeroPath: Dice 0.86, but only about 55% of the true centerline reached. |
 | Routing and fly-through on real CTs | 8 AeroPath cases run end to end; stills reviewed in depth for 4. |
 | Local console | CT viewer (scroll, click, HU, windowing), imports (volume file, JPG/PNG series, path), interactive fly-through with look-around, edit-path engine (backend + UI). |
-| Public demo (Funnel, passcode) | **Interactive phantom tier live**: sign in, place/edit custom nodule in phantom CT, run planning, 3D airway tree with alternatives and path editing, save edited runs. Enforced limits: session isolation, 1 active run per session, 12 runs/hr cap, 3 concurrent public runs, 7-min timeout, pruning. Tested (server suite: 42 tests passing on 2026-11-10; core suite: 49). Server hardening from the 2026-11-10 review: the login limit and per-visitor quotas key on the proxy-appended address (not a forgeable first entry), the check-and-start of a public run is atomic, and a malformed cookie is a 401 instead of a 500. |
+| Public demo (Funnel, passcode) | **Interactive tier live on public data (phantom + the 27 AeroPath CTs)**: sign in, place/edit custom nodule in the phantom CT or pick one on an AeroPath CT, run planning, 3D airway tree with alternatives and path editing, save edited runs. Enforced limits: session isolation, 1 active run per session, no hourly cap (released 2026-11-13), 3 concurrent public runs, 7-min timeout, pruning. Tested (server suite: 42 tests passing on 2026-11-10; core suite: 49). Server hardening from the 2026-11-10 review: the login limit and per-visitor quotas key on the proxy-appended address (not a forgeable first entry), the check-and-start of a public run is atomic, and a malformed cookie is a 401 instead of a 500. |
 | Operator nodule editing in the phantom | Wired into console UI, CT endpoints, and CLI (`--nodule X Y Z --nodule-radius R --nodule-hu H`). Placements outside lung or on airway rejected with 422. |
 | Not started | Learned segmentation, vessel/pleura avoidance, branch labels, accounts, Docker run, clinical validation. |
 
@@ -333,7 +333,7 @@ Second-opinion reviews with the Antigravity CLI (`agy`):
 - Auto-start at login: a launcher is written (`server/start_console_at_login.vbs`) but installing it needs your explicit go-ahead.
 - Decide the unrelated public Funnel on port 443 (points at port 3000, nothing listening): remove it or keep it.
 - Passcode hygiene: 12+ characters, rotate after each demo, never reuse.
-- Never put patient data on the public side. Only the phantom is reachable there.
+- Never put patient data on the public side. Only public data is reachable there: the synthetic phantom and the AeroPath dataset (CC BY 4.0, opened to passcode visitors on 2026-11-13 at the owner's request). Imports and local paths stay local-only.
 
 ### 9.4 Close Phase 1 properly (about a week)
 

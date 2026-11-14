@@ -246,9 +246,9 @@ def test_public_visitors_must_log_in_and_then_get_a_phantom_only_view(api, no_ru
     assert _login(client, "wrong-passcode").status_code == 401
     assert _login(client).status_code == 200
     assert client.get("/api/jobs", headers=PROXY).status_code == 200
-    # it can run, but only the phantom
+    # it can run the phantom and the public AeroPath cases (404 here: this test machine has no AeroPath), nothing else
+    assert client.post("/api/jobs", json={"source": "aeropath", "case": 3}, headers=PROXY).status_code == 404
     assert client.post("/api/jobs", json={"source": "phantom", "video": False}, headers=PROXY).status_code == 200
-    assert client.post("/api/jobs", json={"source": "aeropath", "case": 3}, headers=PROXY).status_code == 403
     assert client.post("/api/jobs", json={"source": "upload", "upload_id": "0" * 12}, headers=PROXY).status_code == 403
     # no imports, deletes, or anything else
     assert client.post("/api/uploads", files=[("files", ("ct.mha", vol.read_bytes()))], headers=PROXY).status_code == 403
@@ -291,9 +291,9 @@ def test_public_visitors_see_only_phantom_runs_and_only_safe_files(api):
 
     listed = {j["id"] for j in client.get("/api/jobs", headers=PROXY).json()}
     assert ph in listed and bad in listed
-    assert aero not in listed and priv not in listed  # only the phantom: not AeroPath, not an imported scan
-    for hidden in (aero, priv):
-        assert client.get(f"/api/jobs/{hidden}", headers=PROXY).status_code == 404
+    assert aero in listed and priv not in listed  # public data (phantom, AeroPath) yes; an imported scan never
+    assert client.get(f"/api/jobs/{priv}", headers=PROXY).status_code == 404
+    assert "log" not in client.get(f"/api/jobs/{aero}", headers=PROXY).json()
     one = client.get(f"/api/jobs/{ph}", headers=PROXY).json()
     assert "log" not in one
     err = client.get(f"/api/jobs/{bad}", headers=PROXY).json()
@@ -302,11 +302,14 @@ def test_public_visitors_see_only_phantom_runs_and_only_safe_files(api):
     ok = ["route.json", "airway_mesh.glb", "flythrough.mp4", "stills/bifurcation_01.png"]
     for f in ok:
         assert client.get(f"/files/{ph}/{f}", headers=PROXY).status_code == 200, f
-    for f in ("job.log", "job_result.json", "airway_mask.nii.gz", "stack.json", "owner.txt"):  # not on the allowlist
-        assert client.get(f"/files/{ph}/{f}", headers=PROXY).status_code == 404, f
-    for hidden in (aero, priv):  # other CTs' outputs are not reachable even by exact name
-        for f in ok:
-            assert client.get(f"/files/{hidden}/{f}", headers=PROXY).status_code == 404, (hidden, f)
+    for run in (ph, aero):
+        for f in ("job.log", "job_result.json", "airway_mask.nii.gz", "stack.json", "owner.txt"):  # not on the allowlist
+            assert client.get(f"/files/{run}/{f}", headers=PROXY).status_code == 404, (run, f)
+    for f in ok:
+        assert client.get(f"/files/{aero}/{f}", headers=PROXY).status_code == 200, f
+    assert "input" not in client.get(f"/files/{aero}/route.json", headers=PROXY).json()
+    for f in ok:  # an imported scan's outputs are not reachable even by exact name
+        assert client.get(f"/files/{priv}/{f}", headers=PROXY).status_code == 404, (priv, f)
     assert client.get(f"/files/{ph}/../{priv}/route.json", headers=PROXY).status_code == 404
     assert client.get(f"/files/{ph}/%2e%2e/{priv}/route.json", headers=PROXY).status_code == 404
     assert client.get(f"/files/{ph}/stills/..%2f..%2fjob.log", headers=PROXY).status_code == 404
@@ -390,8 +393,19 @@ def test_public_visitor_one_active_run_per_session(api, no_run):
     assert "already have a run in progress" in r2.json()["detail"]
 
 
-def test_public_visitor_hourly_cap(api, no_run):
+def test_there_is_no_hourly_cap_by_default(api, no_run):
     _, main, _ = api
+    assert main.PUBLIC_MAX_PER_HOUR is None
+    a, ha = _visitor(main, "6.6.6.6")
+    for _ in range(15):  # more than the old 12 per hour, one after another
+        r = _run(a, ha)
+        assert r.status_code == 200, r.text
+        main._jobs[r.json()["id"]]["status"] = "done"
+
+
+def test_public_visitor_hourly_cap(api, no_run, monkeypatch):
+    _, main, _ = api
+    monkeypatch.setattr(main, "PUBLIC_MAX_PER_HOUR", 12)  # the cap still works when an owner turns it on
     client = TestClient(main.app)
     assert _login(client).status_code == 200
     # Create first job to establish session and owner
@@ -432,8 +446,9 @@ def test_public_visitor_bounds_and_nodule_validation(api, no_run):
     client, _, _ = api
     assert _login(client).status_code == 200
 
-    # Non-phantom source is refused
-    assert client.post("/api/jobs", json={"source": "aeropath", "case": 1}, headers=PROXY).status_code == 403
+    # Imported scans are refused; AeroPath is allowed but this test machine has none
+    assert client.post("/api/jobs", json={"source": "upload", "upload_id": "0" * 12}, headers=PROXY).status_code == 403
+    assert client.post("/api/jobs", json={"source": "aeropath", "case": 1}, headers=PROXY).status_code == 404
 
     # Radius bounds (1-15 mm)
     assert client.post("/api/jobs", json={"source": "phantom", "radius": 0.5}, headers=PROXY).status_code == 422
@@ -629,6 +644,46 @@ def test_one_active_run_per_session_and_per_client_address(api, no_run):
     assert _run(a, ha).status_code == 200                      # after the first finished
 
 
+def test_public_visitors_can_plan_on_aeropath_within_the_same_limits(api, no_run):
+    client, main, tmp = api
+    (tmp / "aero" / "1").mkdir(parents=True)
+    (tmp / "aero" / "1" / "1_CT_HR.nii.gz").write_bytes(b"x")
+    main.AEROPATH_ROOT = tmp / "aero"
+    c, h = _visitor(main, "4.4.4.4")
+    cases = c.get("/api/cases", headers=h).json()
+    assert cases["aeropath"] == [1] and cases["mode"] == "public" and "aeropath_root" not in cases and "jobs_dir" not in cases
+    assert _run(c, h, source="aeropath", case=1).status_code == 200
+    d = [j for j in main._jobs.values() if j["status"] == "queued"][0]
+    assert d["params"]["source"] == "aeropath" and d["owner"] != "local"
+    main._jobs[d["id"]]["status"] = "done"
+    # the same bounds apply; a real scan has no fixed frame, but absurd coordinates are refused
+    assert _run(c, h, source="aeropath", case=1, target_mode="manual", target=[10, 20, 3000]).status_code == 422
+    assert _run(c, h, source="aeropath", case=1, target_mode="manual", target=[10, 20, 30]).status_code == 200
+    main._jobs[[j for j in main._jobs.values() if j["status"] == "queued"][0]["id"]]["status"] = "done"
+    assert _run(c, h, source="aeropath", case=1, radius=40).status_code == 422
+    assert _run(c, h, source="aeropath", case=1, phantom_nodule={"center": [-34, 0, 10]}).status_code == 422  # phantom only
+    assert _run(c, h, source="aeropath", case=2).status_code == 404  # no such case
+    # still no imports, and a visitor's AeroPath run is invisible to other visitors
+    assert c.post("/api/jobs", json={"source": "upload", "upload_id": "0" * 12}, headers=h).status_code == 403
+    other, ho = _visitor(main, "5.5.5.5")
+    assert other.get("/api/jobs", headers=ho).json() == []
+
+
+def test_known_failures_get_a_fixed_explanation_and_other_errors_stay_generic(api):
+    client, main, tmp = api
+    emph, other = "20261110-090010-eeeeee", "20261110-090011-ffffff"
+    _make_job(tmp, emph, "aeropath", ok=False,
+              error="ValueError: Region growing already exceeds 400 mL (1246 mL) at C:/Users/someone/secret/9.nii.gz")
+    _make_job(tmp, other, "phantom", ok=False, error="OSError: C:/Users/someone/secret/x")
+    main._restore_finished_jobs()
+    assert _login(client).status_code == 200
+    e = client.get(f"/api/jobs/{emph}", headers=PROXY).json()["result"]["error"]
+    assert "emphysema" in e and "someone" not in e and "secret" not in e and "1246" not in e  # fixed text, nothing copied
+    assert client.get(f"/api/jobs/{other}", headers=PROXY).json()["result"]["error"] == "the run failed"
+    cases = client.get("/api/cases", headers=PROXY).json()
+    assert "9" in cases["aeropath_unsupported"]
+
+
 def test_a_forged_forwarded_for_header_does_not_dodge_the_login_limit(api):
     """The proxy appends the real address LAST; a client can put anything before it."""
     client, main, _ = api
@@ -673,7 +728,7 @@ def test_hourly_cap_and_global_cap(api, no_run, monkeypatch):
         assert r.status_code == 200
         main._jobs[r.json()["id"]]["status"] = "done"
     assert _run(a, ha).status_code == 429                      # third in the hour
-    monkeypatch.setattr(main, "PUBLIC_MAX_PER_HOUR", 99)
+    monkeypatch.setattr(main, "PUBLIC_MAX_PER_HOUR", None)
     monkeypatch.setattr(main, "PUBLIC_MAX_ACTIVE_TOTAL", 2)
     vs = [_visitor(main, f"9.9.9.{i}") for i in range(3)]
     assert [_run(c, h).status_code for c, h in vs] == [200, 200, 429]  # the third finds the demo busy

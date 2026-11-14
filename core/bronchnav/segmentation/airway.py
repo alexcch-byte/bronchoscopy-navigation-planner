@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import scipy.ndimage as ndi
 
+from .. import accel
+
 AIR_THRESHOLDS_HU = tuple(range(-950, -799, 25))  # -950 ... -800
 
 
@@ -22,6 +24,7 @@ class AirwaySegmentation:
     volumes_ml: dict[int, float] = field(default_factory=dict)
     leak_detected: bool = False
     notes: list[str] = field(default_factory=list)
+    small_airways_ml: float = 0.0  # volume added by the thin-branch extension (0 when it is off)
 
 
 def _best_seed_in_slices(hu: np.ndarray, spacing_mm: float, zs, min_ring_tissue: float):
@@ -106,7 +109,25 @@ def find_trachea_seed(
     )
 
 
-def segment_airway(
+def segment_airway(*args, **kwargs) -> "AirwaySegmentation":
+    """Grow the airway from the trachea (see `_segment_airway` for the parameters and the method).
+
+    Runs on the GPU when one is usable. If the GPU fails (out of memory, driver error) the whole step is repeated
+    on the CPU, so a GPU problem never fails a run.
+    """
+    try:
+        return _segment_airway(*args, **kwargs)
+    except Exception as e:
+        if accel.gpu_available() and accel.is_gpu_error(e):
+            accel.disable_gpu(f"{type(e).__name__}: {e}")
+            seg = _segment_airway(*args, **kwargs)
+            seg.notes.append("The GPU failed, so this step ran on the CPU.")
+            return seg
+        raise
+
+
+
+def _segment_airway(
     hu: np.ndarray,
     spacing_mm: float,
     seed_zyx: tuple[int, int, int] | None = None,
@@ -117,6 +138,8 @@ def segment_airway(
     connectivity: int = 1,
     min_trusted_ml: float = 10.0,
     early_leak_ml: float = 100.0,
+    small_airways: bool = False,
+    small_airway_kwargs: dict | None = None,
 ) -> AirwaySegmentation:
     """Grow the airway from the trachea with the highest threshold that does not leak.
 
@@ -136,6 +159,11 @@ def segment_airway(
     While the previous region is smaller than `min_trusted_ml` it is only a fragment of the trachea
     (thick slices or an uncalibrated lumen can leave just a few mL at the first threshold), so a gain
     there is real airway, not a leak, unless the new volume exceeds `early_leak_ml`.
+
+    `small_airways=True` then extends the result into thin distal branches the global threshold cannot reach
+    (see `small_airways.extend_into_small_airways`; `small_airway_kwargs` overrides its parameters). The
+    result is always a superset of the plain threshold result, so it can only add airway, and a failure of
+    the extension leaves the plain result in place.
     """
     if seed_zyx is None:
         seed_zyx = find_trachea_seed(hu, spacing_mm)
@@ -144,17 +172,20 @@ def segment_airway(
 
     # Restrict work to a box that tightly contains the first candidate component's neighborhood? Use full volume;
     # labeling is O(N) and the ladder has only a handful of steps.
+    xp, ndx = accel.backend()  # the GPU when one is usable (labeling the whole volume per threshold dominates)
+    hu_d = xp.asarray(hu)
+    label_structure = accel.to_device(ndi.generate_binary_structure(3, connectivity))
     prev_mask = None
     prev_t = None
     prev_vol = None
     volumes: dict[int, float] = {}
     leak = False
     for t in thresholds:
-        cand = hu < t
-        if not cand[seed_zyx]:
+        cand = hu_d < t
+        if not bool(cand[seed_zyx]):
             # Seed not below this threshold (shouldn't happen at -950 for a valid seed); skip.
             continue
-        lab, _ = ndi.label(cand, structure=ndi.generate_binary_structure(3, connectivity))
+        lab, _ = ndx.label(cand, structure=label_structure)
         comp = lab == lab[seed_zyx]
         vol = float(comp.sum()) * voxel_ml
         volumes[t] = vol
@@ -181,10 +212,27 @@ def segment_airway(
         raise ValueError("Region growing failed: seed is not in air at any tested threshold.")
 
     # fill pinholes/noise in the lumen
-    mask = ndi.binary_closing(prev_mask, structure=ndi.generate_binary_structure(3, 1), iterations=1)
+    mask = ndx.binary_closing(prev_mask, structure=accel.to_device(ndi.generate_binary_structure(3, 1)), iterations=1)
+    mask = accel.to_host(mask)
+    del hu_d, lab, cand, comp, prev_mask
     mask = np.stack([ndi.binary_fill_holes(mask[z]) for z in range(mask.shape[0])], axis=0)
     if not leak and prev_t == thresholds[-1]:
         notes.append("No leak detected up to the highest threshold; airway may still be incomplete.")
+    added_ml = 0.0
+    if small_airways:
+        from .small_airways import extend_into_small_airways
+
+        try:
+            mask, info = extend_into_small_airways(hu, spacing_mm, mask, **(small_airway_kwargs or {}))
+            added_ml = float(info["added_ml"])
+            notes.append(
+                f"Thin-branch extension added {added_ml:.1f} mL"
+                + (" (capped at its volume limit)." if info.get("capped") else ".")
+            )
+        except Exception as e:  # never lose the plain result because of the extension
+            if accel.is_gpu_error(e):
+                raise  # segment_airway repeats the whole step on the CPU
+            notes.append(f"Thin-branch extension skipped: {type(e).__name__}: {e}")
     return AirwaySegmentation(
         mask=mask,
         seed_zyx=tuple(int(v) for v in seed_zyx),
@@ -192,4 +240,5 @@ def segment_airway(
         volumes_ml=volumes,
         leak_detected=leak,
         notes=notes,
+        small_airways_ml=added_ml,
     )
