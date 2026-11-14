@@ -164,17 +164,17 @@
     <div id="importBox">
       <div id="dropZone" style="border:2px dashed var(--line);border-radius:8px;padding:14px 10px;text-align:center;cursor:pointer;margin-bottom:10px;background:var(--bg);transition:background .2s,border-color .2s">
         <div style="font-weight:600;font-size:13px">📁 Drag & drop scans here</div>
-        <div class="hint">JPG, PNG, TIFF, ZIP archives, or 3D volume (.nii.gz, .mha, .nrrd)</div>
+        <div class="hint">A DICOM folder (or .zip of it), 3D volume (.nii.gz, .mha, .nrrd), or JPG/PNG/TIFF images</div>
       </div>
       <label for="fileIn">Or choose files</label>
-      <input type="file" id="fileIn" multiple accept=".nii,.gz,.mha,.mhd,.raw,.zraw,.nrrd,.nhdr,.jpg,.jpeg,.png,.bmp,.tif,.tiff,.zip">
+      <input type="file" id="fileIn" multiple accept=".nii,.gz,.mha,.mhd,.raw,.zraw,.nrrd,.nhdr,.jpg,.jpeg,.png,.bmp,.tif,.tiff,.zip,.dcm,.dicom">
       <div class="row" style="margin-top:6px">
-        <button id="pickFolder" type="button">Choose image folder</button>
+        <button id="pickFolder" type="button">Choose DICOM / image folder</button>
         <button id="delUp" type="button" hidden>Remove</button>
       </div>
       <input type="file" id="folderIn" webkitdirectory multiple hidden>
       <label for="localPath">Or a path on this PC</label>
-      <div class="row"><input type="text" id="localPath" placeholder="C:\scans\ct.nii.gz, .zip, or image folder"><button id="useLocal" type="button" style="flex:0 0 auto">Use</button></div>
+      <div class="row"><input type="text" id="localPath" placeholder="C:\scans\ct.nii.gz, .zip, DICOM or image folder"><button id="useLocal" type="button" style="flex:0 0 auto">Use</button></div>
       <div class="status" id="upStatus" hidden></div>
       <div id="stackBox" hidden>
         <h2 style="margin-top:12px">Image series settings</h2>
@@ -448,7 +448,7 @@ async function loadCases() {
   const src = $('source'); src.innerHTML = '';
   src.add(new Option('Synthetic phantom (fast, ~15 s)', 'phantom'));
   if (cases.aeropath.length) src.add(new Option(`AeroPath real CT (${cases.aeropath.length} cases)`, 'aeropath'));
-  src.add(new Option('My own CT (import a file or images)', 'upload'));
+  src.add(new Option('My own CT (import DICOM, a file or images)', 'upload'));
   const cs = $('case'); cs.innerHTML = '';
   const unsupported = cases.aeropath_unsupported || {};
   cases.aeropath.forEach((c) => cs.add(new Option(unsupported[c] ? `Case ${c} (cannot be segmented: ${unsupported[c]})` : `Case ${c}`, c)));
@@ -496,19 +496,22 @@ function showUpload(u) {
   if (!u) { upStatus(''); return; }
   const i = u.info || {};
   const fmtStr = (i.formats || []).length ? ` [${(i.formats).join(', ').toUpperCase()}]` : '';
+  const dw = ((i.dicom && i.dicom.warnings) || []).map((w) => '\n- ' + w).join('');
   upStatus(u.kind === 'volume'
-    ? `Volume: ${u.name}\n${(i.size_xyz || []).join(' x ')} voxels, spacing ${(i.spacing_mm || []).join(' x ')} mm, ${i.pixel_type}`
+    ? `${i.dicom ? '' : 'Volume: '}${u.name}\n${(i.size_xyz || []).join(' x ')} voxels, spacing ${(i.spacing_mm || []).join(' x ')} mm, ${i.pixel_type}${i.dicom ? '\nPatient data removed: only the image values and geometry were kept.' : ''}${dw}`
     : `Image series${fmtStr}: ${i.n_images} images, ${(i.size_px || []).join(' x ')} px (${i.first} ... ${i.last})\nSelect a preset or enter resolution & window below, then click "Open in CT viewer" to inspect.`);
 }
 function sendFiles(fileList) {
   const files = [...fileList];
   if (!files.length) return;
+  if (files.length > 1000) { upStatus(`${files.length} files is too many for one upload (limit 1000). Zip the folder, or use "a path on this PC".`, true); return; }
   const fd = new FormData(); let bytes = 0;
   files.forEach((f) => { fd.append('files', f, f.name); bytes += f.size; });
   upStatus(`Uploading ${files.length} file(s), ${(bytes / 1e6).toFixed(0)} MB...`);
   const xhr = new XMLHttpRequest();
   xhr.open('POST', '/api/uploads');
   xhr.upload.onprogress = (e) => { if (e.lengthComputable) upStatus(`Uploading... ${Math.round((e.loaded / e.total) * 100)}%`); };
+  xhr.upload.onload = () => upStatus('Uploaded. Checking the scan (a DICOM series is read and its patient data removed; this can take a minute)...');
   xhr.onerror = () => upStatus('Upload failed (network).', true);
   xhr.onload = () => {
     let d = {}; try { d = JSON.parse(xhr.responseText); } catch (e) { /* ignore */ }
@@ -520,9 +523,9 @@ function sendFiles(fileList) {
 $('fileIn').addEventListener('change', () => sendFiles($('fileIn').files));
 $('pickFolder').addEventListener('click', () => $('folderIn').click());
 $('folderIn').addEventListener('change', () => {
-  const ok = [...$('folderIn').files].filter((f) => /\.(jpe?g|png|bmp|tiff?|nii(\.gz)?|mha|mhd|nrrd|raw|zip)$/i.test(f.name));
-  if (!ok.length) { upStatus('No supported CT files or images in that folder.', true); return; }
-  sendFiles(ok);
+  const all = [...$('folderIn').files];
+  if (!all.length) { upStatus('That folder is empty.', true); return; }
+  sendFiles(all);   // DICOM slices often have no extension, so the server decides what is a scan
 });
 $('useLocal').addEventListener('click', async () => {
   const p = $('localPath').value.trim(); if (!p) return;
@@ -563,8 +566,11 @@ if (dropZone) {
           files.push(file);
         } else if (entry.isDirectory) {
           const reader = entry.createReader();
-          const entries = await new Promise((res, rej) => reader.readEntries(res, rej));
-          for (const child of entries) await traverseEntry(child);
+          for (;;) {   // readEntries returns only a batch (about 100) per call: keep reading until it is empty
+            const entries = await new Promise((res, rej) => reader.readEntries(res, rej));
+            if (!entries.length) break;
+            for (const child of entries) await traverseEntry(child);
+          }
         }
       }
       const promises = [];

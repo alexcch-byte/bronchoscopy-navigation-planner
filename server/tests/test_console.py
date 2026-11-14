@@ -909,3 +909,111 @@ def test_add_airway_preview_and_save(api, monkeypatch):
     old = sitk.GetArrayFromImage(sitk.ReadImage(str(tmp / "jobs" / jid / "airway_mask.nii.gz"))).sum()
     new = sitk.GetArrayFromImage(sitk.ReadImage(str(out / "airway_mask.nii.gz"))).sum()
     assert new > old
+
+
+# ---------------------------------------------------------------- DICOM import
+
+def _dicom_series(folder, n=40, modality="CT", ext="", uid="1.2.826.0.1.3680043.8.498.7"):
+    """A synthetic CT written as one DICOM file per slice, with identifying tags (like a scanner export)."""
+    folder.mkdir(parents=True, exist_ok=True)
+    img = sitk.GetImageFromArray(np.random.default_rng(1).integers(-900, 200, size=(n, 24, 24)).astype(np.int16))
+    img.SetSpacing((0.7, 0.7, 1.0))
+    d = img.GetDirection()
+    w = sitk.ImageFileWriter()
+    w.KeepOriginalImageUIDOn()
+    w.SetImageIO("GDCMImageIO")
+    for i in range(n):
+        s = img[:, :, i]
+        for k, v in {"0008|0060": modality, "0020|000e": uid, "0010|0010": "DOE^JANE", "0010|0020": "MRN-99887",
+                     "0020|0013": str(i + 1), "0028|1052": "0", "0028|1053": "1",
+                     "0020|0032": "\\".join(f"{x:.6f}" for x in img.TransformIndexToPhysicalPoint((0, 0, i))),
+                     "0020|0037": "\\".join(str(x) for x in (d[0], d[3], d[6], d[1], d[4], d[7])),
+                     "0008|0018": f"{uid}.{i + 1}"}.items():
+            s.SetMetaData(k, v)
+        w.SetFileName(str(folder / f"IM{i:04d}{ext}"))
+        w.Execute(s)
+    return sorted(folder.iterdir())
+
+
+def _upload_files(client, paths):
+    return client.post("/api/uploads", files=[("files", (p.name, p.read_bytes(), "application/octet-stream")) for p in paths])
+
+
+def _assert_clean_upload(main, up_id):
+    d = main.UPLOAD_DIR / up_id
+    assert sorted(p.name for p in d.iterdir()) == ["ct.mha", "meta.json"]   # no DICOM original is left behind
+    for p in d.iterdir():
+        assert b"DOE" not in p.read_bytes() and b"MRN-99887" not in p.read_bytes()
+
+
+def test_dicom_folder_upload_becomes_a_clean_volume(api):
+    client, main, tmp = api
+    files = _dicom_series(tmp / "src", n=40)                        # extensionless, as scanners write them
+    (tmp / "src" / "README.txt").write_text("viewer notes")        # strays that travel with a folder are ignored
+    r = _upload_files(client, sorted((tmp / "src").iterdir()))
+    assert r.status_code == 200, r.text
+    u = r.json()
+    assert u["kind"] == "volume" and u["name"] == "DICOM CT, 40 slices"
+    assert u["info"]["size_xyz"] == [24, 24, 40] and u["info"]["dicom"]["n_slices"] == 40
+    _assert_clean_upload(main, u["upload_id"])
+    assert len(files) == 40 and all(p.exists() for p in files)    # the client's own files are untouched
+
+
+def test_dicom_zip_upload_and_local_folder_and_errors(api):
+    import zipfile
+
+    client, main, tmp = api
+    _dicom_series(tmp / "z", n=35, ext=".dcm")
+    (tmp / "z" / "preview1.png").write_bytes(_png_bytes())
+    zp = tmp / "series.zip"
+    with zipfile.ZipFile(zp, "w") as zf:
+        for p in (tmp / "z").iterdir():
+            zf.write(p, p.name)
+    r = _upload_files(client, [zp])
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "DICOM CT, 35 slices"
+    _assert_clean_upload(main, r.json()["upload_id"])
+
+    _dicom_series(tmp / "folder", n=32)
+    r = client.post("/api/uploads/local", json={"path": str(tmp / "folder")})
+    assert r.status_code == 200, r.text
+    assert len(list((tmp / "folder").iterdir())) == 32             # a local folder is read, never modified
+    _assert_clean_upload(main, r.json()["upload_id"])
+
+    r = client.post("/api/uploads/local", json={"path": str(tmp / "folder" / "IM0000")})
+    assert r.status_code == 400 and "one DICOM slice" in r.json()["detail"]
+
+    _dicom_series(tmp / "mr", n=40, modality="MR")
+    r = _upload_files(client, sorted((tmp / "mr").iterdir()))
+    assert r.status_code == 400 and "not CT" in r.json()["detail"]
+    assert not any(main.UPLOAD_DIR.glob("*/dicom_raw"))             # a refused upload leaves nothing behind
+
+    r = _upload_files(client, [tmp / "z" / "preview1.png"])
+    assert r.status_code == 400                                     # one image is not a series
+    junk = tmp / "junk.bin"
+    junk.write_bytes(b"not a scan")
+    r = _upload_files(client, [junk])
+    assert r.status_code == 400 and "unsupported type" in r.json()["detail"]
+
+
+def test_public_visitors_cannot_import_dicom(api, monkeypatch):
+    client, main, tmp = api
+    files = _dicom_series(tmp / "p", n=35)
+    hdr = {**PROXY, "X-Forwarded-For": "203.0.113.9"}
+    assert client.post("/api/login", json={"passcode": PASSCODE}, headers=hdr).status_code == 200
+    r = client.post("/api/uploads", files=[("files", (p.name, p.read_bytes(), "application/octet-stream")) for p in files], headers=hdr)
+    assert r.status_code in (401, 403)
+
+
+def test_stray_files_beside_an_image_series_are_ignored(api):
+    client, main, tmp = api
+    imgs = []
+    for i in range(4):
+        p = tmp / f"s{i}.png"
+        p.write_bytes(_png_bytes())
+        imgs.append(p)
+    junk = tmp / "Thumbs.db"
+    junk.write_bytes(b"x")
+    r = _upload_files(client, [*imgs, junk])
+    assert r.status_code == 200, r.text
+    assert r.json()["kind"] == "images"

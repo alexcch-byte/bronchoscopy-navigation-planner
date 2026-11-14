@@ -4,7 +4,7 @@ The test console runs one planning job at a time as a subprocess (core/scripts/p
 the page in app/static plus each job's output folder. It is meant for a developer's own machine:
 bind to 127.0.0.1 only, test data only, never expose it. The production job queue arrives in Phase 4.
 
-Importing your own CT (a volume file, or a series of JPEG/PNG images) copies it under UPLOADS_DIR or
+Importing your own CT (a DICOM folder, a volume file, or a series of JPEG/PNG images) copies it under UPLOADS_DIR or
 registers a path on this machine. Both are REFUSED when the request arrives through a proxy (for example
 `tailscale serve`, which adds identity/forwarding headers): the console has no login, so scans must not
 travel through a shared URL. Set ALLOW_REMOTE_UPLOADS=1 to override (not recommended).
@@ -17,6 +17,7 @@ Environment:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -396,24 +397,49 @@ def _load_meta(up_id: str) -> dict:
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+def _finish_dicom(up_id: str, root: Path, bytes_in: int | None, remove: list[Path]) -> dict:
+    """Convert the CT series under `root` to a plain volume in this upload's folder, then delete the DICOM originals
+    that were copied for it (`remove`). Only voxels and geometry are kept, so no patient identifiers stay on disk."""
+    from bronchnav.io import dicom
+
+    dest = UPLOAD_DIR / up_id
+    dest.mkdir(parents=True, exist_ok=True)
+    out = dest / "ct.mha"
+    try:
+        dinfo = dicom.convert_series(root, out)
+    except ValueError as e:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise HTTPException(400, str(e))
+    for p in remove:
+        shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
+    info = _describe("volume", out)
+    info["dicom"] = {"n_slices": dinfo["n_slices"], "other_series": dinfo["other_series"], "warnings": dinfo["warnings"]}
+    name = f"DICOM CT, {dinfo['n_slices']} slices"
+    return _save_meta(up_id, {"kind": "volume", "name": name, "path": str(out), "bytes": bytes_in, "info": info, "copied": True})
+
+
 @app.post("/api/uploads")
 async def upload(request: Request, files: list[UploadFile] = File(...)) -> dict:
-    """Copy a CT volume file, ZIP archive, or a series of images (JPEG, PNG, TIFF) into JOBS_DIR/uploads."""
+    """Copy a CT volume file, ZIP archive, DICOM series or a series of images (JPEG, PNG, TIFF) into the uploads
+    folder. A DICOM series is converted to a plain volume and the originals are deleted."""
     _require_local(request)
     up_id = uuid.uuid4().hex[:12]
     dest = UPLOAD_DIR / up_id
     dest.mkdir(parents=True)
-    total, saved = 0, []
+    total, saved, unknown = 0, [], []
     try:
         for f in files:
             name = _safe_name(f.filename or "")
-            if not (_is_volume(name) or _is_image(name) or _is_archive(name) or name.lower().endswith(RAW_EXTS)):
-                raise HTTPException(400, f"{name}: unsupported type. Use .nii/.nii.gz/.mha/.mhd(+.raw)/.nrrd/.zip, or JPEG/PNG/BMP/TIFF images")
-            target = dest / name
-            n = 2
-            while target.exists():
-                target = dest / f"{target.stem}_{n}{target.suffix}"
-                n += 1
+            if _is_volume(name) or _is_image(name) or _is_archive(name) or name.lower().endswith(RAW_EXTS):
+                target = dest / name
+                n = 2
+                while target.exists():
+                    target = dest / f"{target.stem}_{n}{target.suffix}"
+                    n += 1
+            else:  # most DICOM slices have no (or an odd) extension: keep them apart and check what they are below
+                (dest / "dicom_raw").mkdir(exist_ok=True)
+                target = dest / "dicom_raw" / f"{len(unknown):05d}_{name}"
+                unknown.append(target)
             with open(target, "wb") as out:
                 while chunk := await f.read(8 * 1024 * 1024):
                     total += len(chunk)
@@ -421,6 +447,21 @@ async def upload(request: Request, files: list[UploadFile] = File(...)) -> dict:
                         raise HTTPException(413, "upload larger than 3 GB")
                     out.write(chunk)
             saved.append(target)
+
+        # DICOM slices (a folder of files, usually without extensions)
+        if unknown:
+            from bronchnav.io import dicom
+
+            dcm = [p for p in unknown if dicom.is_dicom_file(p)]
+            others = [p for p in unknown if p not in dcm]
+            known = [p for p in saved if p not in unknown]   # volumes, images and archives that came with them
+            if len(dcm) >= 3:
+                # other files that came along with the folder (previews, viewers, notes) are ignored and deleted
+                return await asyncio.to_thread(_finish_dicom, up_id, dest / "dicom_raw", total, [dest / "dicom_raw", *known])
+            if dcm or not known:
+                what = "a DICOM series needs at least 3 slices; send the folder with every slice, or a .zip of it" if dcm else                     re.sub(r"^\d{5}_", "", others[0].name) + ": unsupported type. Use a DICOM folder or .zip, .nii/.nii.gz/.mha/.mhd(+.raw)/.nrrd, or JPEG/PNG/BMP/TIFF images"
+                raise HTTPException(400, what)
+            shutil.rmtree(dest / "dicom_raw", ignore_errors=True)  # stray files beside a volume or an image series
 
         # Check for zip archives
         zips = [p for p in saved if _is_archive(p.name)]
@@ -431,6 +472,11 @@ async def upload(request: Request, files: list[UploadFile] = File(...)) -> dict:
             # Scan extracted contents
             ex_vols = [p for p in extracted_dir.rglob("*") if p.is_file() and _is_volume(p.name)]
             ex_imgs = [p for p in extracted_dir.rglob("*") if p.is_file() and _is_image(p.name) and not _is_volume(p.name)]
+            if not ex_vols:
+                from bronchnav.io import dicom
+
+                if len(dicom.find_dicom_files(extracted_dir)) >= 3:
+                    return await asyncio.to_thread(_finish_dicom, up_id, extracted_dir, total, [extracted_dir, *saved])
             if ex_vols:
                 kind, primary, display = "volume", ex_vols[0], f"{ex_vols[0].name} (from {zips[0].name})"
             elif len(ex_imgs) >= 3:
@@ -490,7 +536,8 @@ class LocalPath(BaseModel):
 
 @app.post("/api/uploads/local")
 def register_local(req: LocalPath, request: Request) -> dict:
-    """Use a volume file, ZIP archive, or an image folder that already sits on this machine (nothing is copied)."""
+    """Use a volume file, ZIP archive, DICOM folder or image folder that already sits on this machine. Nothing is
+    copied, except that a DICOM series is converted to a de-identified volume in the uploads folder."""
     _require_local(request)
     p = Path(req.path.strip().strip('"')).expanduser()
     if not p.exists():
@@ -503,6 +550,11 @@ def register_local(req: LocalPath, request: Request) -> dict:
             _safe_extract_zip(p, ex_dir)
             ex_vols = [f for f in ex_dir.rglob("*") if f.is_file() and _is_volume(f.name)]
             ex_imgs = [f for f in ex_dir.rglob("*") if f.is_file() and _is_image(f.name) and not _is_volume(f.name)]
+            if not ex_vols:
+                from bronchnav.io import dicom
+
+                if len(dicom.find_dicom_files(ex_dir)) >= 3:
+                    return _finish_dicom(up_id, ex_dir, p.stat().st_size, [ex_dir])
             if ex_vols:
                 kind, primary, display = "volume", ex_vols[0], f"{ex_vols[0].name} (from {p.name})"
             elif len(ex_imgs) >= 3:
@@ -527,10 +579,17 @@ def register_local(req: LocalPath, request: Request) -> dict:
                 pass
 
         if not _is_volume(p.name):
-            raise HTTPException(400, f"{p.name}: need a volume file ({', '.join(VOLUME_EXTS)}), a ZIP archive (.zip), or a folder of images")
+            from bronchnav.io import dicom
+
+            if dicom.is_dicom_file(p):
+                raise HTTPException(400, f"{p.name} is one DICOM slice; give the folder that holds all the slices")
+            raise HTTPException(400, f"{p.name}: need a volume file ({', '.join(VOLUME_EXTS)}), a ZIP archive (.zip), a DICOM folder, or a folder of images")
         kind, display = "volume", p.name
     else:
-        from bronchnav.io import list_images
+        from bronchnav.io import dicom, list_images
+
+        if len(dicom.find_dicom_files(p)) >= 3:
+            return _finish_dicom(uuid.uuid4().hex[:12], p, None, [])
 
         try:
             imgs = list_images(p)

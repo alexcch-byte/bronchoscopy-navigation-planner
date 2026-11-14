@@ -109,7 +109,9 @@ If the route cannot reach the nodule it ends at the closest airway the scope can
 - a **folder**: read as a DICOM series (searched recursively; the largest series is used), or
 - a **single volume file** in any 3D format SimpleITK reads, no DICOM needed: NIfTI (`.nii`, `.nii.gz`), MetaImage (`.mha`, or `.mhd` plus its `.raw`), NRRD (`.nrrd`), VTK, MINC, MRC, GE4/5 and a few others.
 
-A volume file must be in Hounsfield units with real voxel spacing. A zipped DICOM folder must be unzipped first. A single 2D image, a PDF or a video cannot be used.
+A volume file must be in Hounsfield units with real voxel spacing. A single 2D image, a PDF or a video cannot be used. (The command line needs a zipped DICOM folder unzipped first; the console does not, see below.)
+
+**In the local console**, the "My own CT" source (local console only) takes a **DICOM folder** (the folder button, drag and drop, or a path on this PC) or a `.zip` of one, as well as a volume file or an image series. Slices need no file extension. The console picks the CT series with the most slices, skips localizers and other modalities, and refuses a series with overlapping or missing slices (uneven spacing), with the reason. It stores the result as a plain volume (HU, LPS, 16-bit) built from the voxels and geometry only, so no patient name, ID, date, UID or institution is kept, and it deletes the DICOM originals it copied (a folder given as a path is read, never modified). Limits: 1000 files per browser upload (zip larger series or use the path box); one series per import (the largest); gantry tilt is warned about, not corrected. Checked on a real AeroPath CT written out as 553 DICOM slices: the imported volume matched the original voxel for voxel and the plan gave the same route. Not yet tried on scanner-exported DICOM (compressed or vendor-specific files).
 
 Converting other sources: `dcm2niix` (DICOM to NIfTI), 3D Slicer (opens most formats and saves NIfTI/NRRD/MHA), ITK-SNAP, or SimpleITK `ReadImage`/`WriteImage`.
 
@@ -123,7 +125,7 @@ How well it works (one real case, AeroPath 20, exported as 8-bit lung-window JPE
 
 ### Privacy
 
-The console's "My own CT" source copies a file or image series to `%USERPROFILE%\bronchnav-uploads\` (override with `UPLOADS_DIR`; never served over HTTP) or just points at a path on this PC, and has a Remove button. Both are **refused when the request comes through a proxy** (Tailscale `serve` or Funnel), because the console does no de-identification and the public view is read-only: open `http://127.0.0.1:8000` on this PC to import. Runs of imported scans are also hidden from the public view and their files are never served to it. Set `ALLOW_REMOTE_UPLOADS=1` to override (not recommended). De-identify real scans before using them anywhere.
+The console's "My own CT" source copies a file or image series to `%USERPROFILE%\bronchnav-uploads\` (override with `UPLOADS_DIR`; never served over HTTP) or just points at a path on this PC, and has a Remove button. Both are **refused when the request comes through a proxy** (Tailscale `serve` or Funnel), because the console has no login and the public view is read-only (a DICOM import is converted to a volume without patient tags, but other formats are stored as sent): open `http://127.0.0.1:8000` on this PC to import. Runs of imported scans are also hidden from the public view and their files are never served to it. Set `ALLOW_REMOTE_UPLOADS=1` to override (not recommended). De-identify real scans before using them anywhere.
 
 ## Datasets
 
@@ -165,7 +167,7 @@ A page for trying the pipeline without the command line: pick the synthetic phan
 ```
 
 - **Targets:** *Automatic* on AeroPath places a test point in the lung just past a distal airway tip (slider chooses which tip, and how many mm beyond). It is not a nodule. On the phantom it uses the known nodule. On your own CT it does the same inside an approximate lung mask found from the scan (Dice 0.92-0.96 against AeroPath's lung labels). *Manual* takes physical LPS mm.
-- **My own CT:** import a volume file (`.nii`, `.nii.gz`, `.mha`/`.mhd` + `.raw`, `.nrrd`), an image series (choose files or a folder, then enter pixel size, slice spacing and window), or give a path on this PC. See [Importing a CT](#importing-a-ct).
+- **My own CT:** import a DICOM folder or zip, a volume file (`.nii`, `.nii.gz`, `.mha`/`.mhd` + `.raw`, `.nrrd`), an image series (choose files or a folder, then enter pixel size, slice spacing and window), or give a path on this PC. See [Importing a CT](#importing-a-ct).
 - **Fly-through, look around:** the recorded MP4 cannot be rotated. The Fly-through tab's *Interactive fly-through* button replays the route live in the 3D view: drag to look in any direction, scroll to zoom the lens, double-click or *Reset look* to recentre, *Look back* to turn around, arrow keys and space when the view is focused. The look direction is an offset from the route direction, so it stays put while the camera moves; play and pause, speed 2-30 mm/s.
 - **Outputs** go to `%USERPROFILE%\bronchnav-jobs\<run id>\` (override with `JOBS_DIR`), outside the Drive folder. Earlier runs reappear in the list after a restart. AeroPath is read from `AEROPATH_ROOT` (default `%USERPROFILE%\datasets\aeropath\extracted\AeroPath`).
 - A phantom run takes about 15 s, an AeroPath run 15-40 s plus video.
